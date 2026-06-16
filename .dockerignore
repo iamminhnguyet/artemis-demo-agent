@@ -1,0 +1,13 @@
+.agentbase/
+.claude/
+.git/
+greennode-agentbase-skills-main/
+artemis-vu-tru-do-dac-cho-troi-vng/
+node_modules/
+__pycache__/
+*.pyc
+.env
+.env.*
+.greennode.json
+*.log
+*.tmp

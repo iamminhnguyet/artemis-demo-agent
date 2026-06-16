@@ -1,0 +1,15 @@
+.agentbase/
+.claude/
+.docker-codex/
+artemis-vu-tru-do-dac-cho-troi-vng/
+greennode-agentbase-skills-main/
+submission-guide.docx
+submission-guide.txt
+app-v2.js
+proxy.py
+.env
+.env.*
+.greennode.json
+*.log
+__pycache__/
+*.pyc

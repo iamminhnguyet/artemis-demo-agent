@@ -1,0 +1,155 @@
+﻿<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Vũ trụ đồ đạc - Chợ trời VNG</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <section id="loginPanel" class="login-panel" aria-label="Đăng nhập domain">
+      <form id="loginForm" class="login-form">
+        <h2>Vũ trụ đồ đạc - Chợ trời VNG</h2>
+        <p>Hãy nhập domain của bạn để đăng nhập và tạo mật khẩu để đảm bảo an toàn nhé.</p>
+        <input id="loginDomain" type="text" placeholder="Nhập domain của bạn" required />
+        <input id="loginPassword" type="password" placeholder="Tạo hoặc nhập mật khẩu" required />
+        <p id="loginStatus" class="login-status" aria-live="polite"></p>
+        <button type="submit">Bay vào vũ trụ</button>
+      </form>
+    </section>
+
+    <main class="page">
+      <section class="hero" aria-label="Vũ trụ đồ đạc">
+        <img class="asteroid asteroid-left" src="assets/asteroid-left.png" alt="" />
+        <img class="asteroid asteroid-right" src="assets/asteroid-right.png" alt="" />
+
+        <button id="notificationButton" class="notification-button" type="button" aria-label="Ô thông báo">
+          <img src="assets/notification-icon.png" alt="" />
+          <span id="notificationBadge">0</span>
+        </button>
+
+        <header class="title-block">
+          <h1>Vũ trụ đồ đạc</h1>
+          <p>giúp Starter tìm đồ thất lạc</p>
+          <div id="signalStats" class="signal-stats" aria-label="Số liệu tín hiệu"></div>
+        </header>
+
+        <section class="moon-stage" aria-label="Starter Galaxy Agent">
+          <img class="moon" src="assets/moon.png" alt="" />
+          <div id="moonText" class="moon-text"></div>
+        </section>
+
+        <form id="chatForm" class="chat-bar" aria-label="Khung chat">
+          <label class="chat-image-button" title="Thêm ảnh vật phẩm">
+            Ảnh
+            <input id="chatImage" type="file" accept="image/*" />
+          </label>
+          <input id="chatInput" type="text" autocomplete="off" placeholder="Nhắn với radar..." />
+          <button type="submit">Gửi</button>
+        </form>
+
+        <div id="choiceRail" class="choice-rail" aria-label="Lựa chọn nhanh"></div>
+      </section>
+
+      <section class="market" aria-label="Chợ trời VNG">
+        <div class="market-divider"></div>
+        <header class="market-heading">
+          <h2>Chợ trời VNG</h2>
+          <p>match người pass với người cần</p>
+        </header>
+
+        <div id="marketGrid" class="market-grid"></div>
+
+        <button id="openLaunchForm" class="launch-button" type="button">
+          <img src="assets/rocket.png" alt="" />
+          <span>Phóng<br />vật phẩm<br />lên chợ</span>
+        </button>
+
+        <button id="openAdminPanel" class="admin-button" type="button" hidden>Artemis duyệt chợ</button>
+      </section>
+
+      <section id="launchPanel" class="launch-panel" aria-label="Đăng vật phẩm lên chợ" hidden>
+        <form id="marketForm" class="launch-form">
+          <div class="form-heading">
+            <h3>Phóng vật phẩm lên chợ</h3>
+            <button id="closeLaunchForm" type="button" aria-label="Đóng">×</button>
+          </div>
+
+          <label>
+            Tên vật phẩm
+            <input id="marketName" type="text" maxlength="60" placeholder="Tối đa 5 từ" required />
+          </label>
+
+          <label>
+            Số lượng
+            <input id="marketQuantity" type="number" min="1" value="1" required />
+          </label>
+
+          <label>
+            Mô tả sản phẩm hoặc link thông tin
+            <textarea id="marketDescription" rows="3" maxlength="900" placeholder="Tối đa 99 từ" required></textarea>
+          </label>
+
+          <label>
+            Giá hữu nghị
+            <input id="marketPrice" type="text" inputmode="numeric" placeholder="150,000" required />
+          </label>
+
+          <label>
+            Ảnh đính kèm
+            <input id="marketImage" type="file" accept="image/*" />
+          </label>
+
+          <label class="stock-field" hidden>
+            Trạng thái
+            <select id="marketStockStatus">
+              <option value="Còn hàng">Còn hàng</option>
+              <option value="Hết hàng">Hết hàng</option>
+            </select>
+          </label>
+
+          <label>
+            Contact
+            <input id="marketContact" type="text" placeholder="nguyetntm5" required />
+          </label>
+
+          <button class="submit-launch" type="submit">Submit</button>
+          <p id="launchStatus" class="launch-status" aria-live="polite"></p>
+        </form>
+      </section>
+
+      <section id="notificationPanel" class="notification-panel" aria-label="Ô thông báo" hidden>
+        <div class="notification-card">
+          <button id="closeNotificationPanel" type="button" aria-label="Đóng">×</button>
+          <h3>Ô thông báo</h3>
+          <div id="notificationList">
+            <p class="empty-note">Chưa có tín hiệu mới.</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="adminPanel" class="notification-panel" aria-label="Admin duyệt vật phẩm" hidden>
+        <div class="notification-card admin-card">
+          <button id="closeAdminPanel" type="button" aria-label="Đóng">×</button>
+          <h3>Artemis duyệt chợ</h3>
+          <div id="adminList" class="admin-list"></div>
+        </div>
+      </section>
+
+      <section id="detailPanel" class="notification-panel" aria-label="Chi tiết vật phẩm" hidden>
+        <div class="notification-card">
+          <button id="closeDetailPanel" type="button" aria-label="Đóng">×</button>
+          <h3 id="detailTitle">Chi tiết vật phẩm</h3>
+          <div id="detailContent" class="detail-grid"></div>
+        </div>
+      </section>
+
+      <button id="backToTop" class="back-to-top" type="button" aria-label="Lên đầu trang" hidden>
+        ↑
+      </button>
+    </main>
+
+    <script src="app.js?v=asset-clean-final"></script>
+  </body>
+</html>
+
