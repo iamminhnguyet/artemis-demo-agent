@@ -105,7 +105,7 @@ button {
 
 .login-form {
   display: grid;
-  width: min(900px, calc(100vw - 44px));
+  width: min(1040px, calc(100vw - 44px));
   gap: 14px;
   border: 4px solid rgba(255, 255, 255, 0.68);
   border-radius: 34px;
@@ -119,9 +119,9 @@ button {
 .login-form h2 {
   margin: 0;
   font-family: var(--cookie);
-  font-size: clamp(1.8rem, 4vw, 3.2rem);
+  font-size: clamp(1.8rem, 5vw, 3.45rem);
   line-height: 0.95;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
 }
 
 .login-form p {
@@ -302,8 +302,8 @@ button {
   transform: translate(-50%, -50%);
   color: var(--blue-text);
   font-family: var(--cookie);
-  font-size: clamp(0.74rem, 1.1vw, 1.12rem);
-  line-height: 1.32;
+  font-size: clamp(0.9rem, 1.34vw, 1.36rem);
+  line-height: 1.24;
   text-align: center;
   text-shadow: 0 2px 0 rgba(255, 255, 255, 0.24);
   overflow: hidden;
@@ -570,13 +570,77 @@ button {
   font-size: clamp(1.55rem, 3vw, 3rem);
 }
 
+.market-search {
+  display: grid;
+  width: min(760px, 82vw);
+  margin: 22px auto 0;
+  gap: 8px;
+  color: #fff;
+  text-align: center;
+}
+
+.market-search label {
+  font-family: var(--body);
+  font-size: 0.98rem;
+  font-weight: 900;
+  text-shadow: 0 2px 0 rgba(32, 16, 100, 0.22);
+}
+
+.market-search div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  border-radius: 999px;
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.22);
+  border: 1px solid rgba(255, 255, 255, 0.34);
+  backdrop-filter: blur(14px);
+}
+
+.market-search input {
+  min-height: 44px;
+  border: 0;
+  border-radius: 999px;
+  padding: 0 20px;
+  color: #402093;
+  background: rgba(255, 255, 255, 0.92);
+  font-family: var(--body);
+  font-weight: 850;
+  outline: 0;
+}
+
+.market-search button {
+  min-height: 44px;
+  border: 0;
+  border-radius: 999px;
+  padding: 0 22px;
+  color: #fff;
+  background: var(--orange);
+  font-family: var(--cookie);
+  font-size: 1rem;
+  box-shadow: 0 5px 0 rgba(64, 32, 147, 0.22);
+}
+
+.market-search button:hover,
+.market-search button:focus-visible {
+  transform: scale(1.04);
+}
+
+.market-search p {
+  min-height: 20px;
+  margin: 0;
+  font-family: var(--body);
+  font-size: 0.9rem;
+  font-weight: 850;
+}
+
 .market-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(280px, 430px));
   gap: clamp(28px, 11vw, 190px);
   justify-content: center;
   align-items: end;
-  margin-top: 52px;
+  margin-top: 34px;
   padding-right: clamp(0px, 8vw, 120px);
 }
 
@@ -591,6 +655,10 @@ button {
 
 .market-card.premium-cloud .cloud-body {
   transform: scale(1.05);
+}
+
+.market-card.market-match .cloud-body {
+  filter: drop-shadow(0 0 24px rgba(255, 220, 95, 0.62));
 }
 
 .market-card.premium-cloud .stock-row {
@@ -992,6 +1060,10 @@ button {
   gap: 12px;
 }
 
+.launch-form [hidden] {
+  display: none !important;
+}
+
 .launch-form label {
   display: grid;
   gap: 6px;
@@ -1013,6 +1085,84 @@ button {
 
 .launch-form textarea {
   resize: vertical;
+}
+
+.launch-form.chat-mode [data-market-field] {
+  display: none;
+}
+
+.launch-form.chat-mode [data-market-field="image"]:not([hidden]) {
+  display: grid;
+}
+
+.launch-wizard {
+  display: grid;
+  gap: 14px;
+}
+
+.launch-wizard[hidden] {
+  display: none;
+}
+
+.launch-wizard-messages {
+  display: grid;
+  max-height: 340px;
+  overflow: auto;
+  gap: 10px;
+  padding: 10px 4px;
+}
+
+.launch-bubble {
+  width: fit-content;
+  max-width: 82%;
+  margin: 0;
+  border-radius: 22px;
+  padding: 12px 16px;
+  font-family: var(--body);
+  font-weight: 900;
+  line-height: 1.35;
+}
+
+.launch-bubble.agent {
+  justify-self: start;
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.launch-bubble.user {
+  justify-self: end;
+  color: #fff;
+  background: linear-gradient(135deg, #ffb12a, #ff8b00);
+}
+
+.launch-wizard-input {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  border-radius: 999px;
+  padding: 8px;
+  background: rgba(64, 32, 147, 0.1);
+}
+
+.launch-wizard-input input {
+  border-radius: 999px;
+}
+
+.launch-wizard-input button {
+  min-width: 88px;
+  border: 0;
+  border-radius: 999px;
+  padding: 0 18px;
+  color: #fff;
+  background: var(--orange);
+  font-family: var(--cookie);
+  font-size: 1.08rem;
+  box-shadow: 0 5px 0 rgba(64, 32, 147, 0.16);
+}
+
+.launch-form [data-market-field="image"]:not([hidden]) {
+  border-radius: 22px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.58);
 }
 
 .submit-launch {
@@ -1061,6 +1211,17 @@ button {
   font-weight: 950;
   letter-spacing: 0.02em;
   text-transform: uppercase;
+}
+
+.notification-group .group-empty {
+  margin: 0;
+  border-radius: 16px;
+  padding: 12px 14px;
+  color: rgba(57, 32, 118, 0.66);
+  background: rgba(255, 255, 255, 0.42);
+  font-family: var(--body);
+  font-size: 0.92rem;
+  font-weight: 850;
 }
 
 .signal-note {
@@ -1169,6 +1330,10 @@ button {
 
 .market-admin-table .admin-row {
   grid-template-columns: 0.85fr 1.35fr 1fr auto;
+}
+
+.found-admin-table .admin-row {
+  grid-template-columns: 0.85fr 1.45fr 0.9fr 1.1fr;
 }
 
 .admin-head {
@@ -1430,7 +1595,7 @@ button {
 
   .moon-text {
     width: 52%;
-    font-size: clamp(0.72rem, 2.6vw, 1.08rem);
+    font-size: clamp(0.86rem, 3vw, 1.18rem);
   }
 
   .market {
@@ -1441,6 +1606,10 @@ button {
     grid-template-columns: 1fr;
     gap: 22px;
     padding-right: 0;
+  }
+
+  .market-search {
+    width: min(92vw, 560px);
   }
 
   .launch-button {
@@ -1474,6 +1643,10 @@ button {
 }
 
 @media (max-width: 560px) {
+  .login-form h2 {
+    font-size: clamp(1.28rem, 8vw, 2rem);
+  }
+
   .title-block h1 {
     font-size: 2.8rem;
   }
@@ -1486,6 +1659,11 @@ button {
     grid-template-columns: 1fr;
     border-radius: 28px;
     width: min(92vw, 480px);
+  }
+
+  .market-search div {
+    grid-template-columns: 1fr;
+    border-radius: 28px;
   }
 
   .chat-bar button {

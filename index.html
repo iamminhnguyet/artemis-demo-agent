@@ -10,7 +10,7 @@
     <section id="loginPanel" class="login-panel" aria-label="Đăng nhập domain">
       <form id="loginForm" class="login-form">
         <h2>Vũ trụ đồ đạc - Phiên chợ trên mây</h2>
-        <p>Hãy nhập domain của bạn để đăng nhập và tạo mật khẩu để đảm bảo an toàn nhé.</p>
+        <p>Hãy nhập domain và tạo mật khẩu để lần sau đăng nhập, đồng thời nhận thông báo từ radar Artemis nhé.</p>
         <input id="loginDomain" type="text" placeholder="Nhập domain của bạn" required />
         <input id="loginPassword" type="password" placeholder="Tạo hoặc nhập mật khẩu" required />
         <p id="loginStatus" class="login-status" aria-live="polite"></p>
@@ -58,6 +58,15 @@
           <p>match người pass với người cần</p>
         </header>
 
+        <form id="marketSearchForm" class="market-search" aria-label="Tìm vật phẩm trên phiên chợ">
+          <label for="marketSearchInput">Starter cần mua gì?</label>
+          <div>
+            <input id="marketSearchInput" type="text" autocomplete="off" placeholder="Nhập từ khóa món đồ..." />
+            <button type="submit">Dò mây</button>
+          </div>
+          <p id="marketSearchStatus" aria-live="polite"></p>
+        </form>
+
         <div id="marketGrid" class="market-grid"></div>
 
         <button id="openLaunchForm" class="launch-button" type="button">
@@ -69,33 +78,41 @@
       </section>
 
       <section id="launchPanel" class="launch-panel" aria-label="Đăng vật phẩm lên chợ" hidden>
-        <form id="marketForm" class="launch-form">
+        <form id="marketForm" class="launch-form" novalidate>
           <div class="form-heading">
             <h3>Phóng vật phẩm lên chợ</h3>
             <button id="closeLaunchForm" type="button" aria-label="Đóng">×</button>
           </div>
 
-          <label>
+          <div id="launchWizard" class="launch-wizard" hidden>
+            <div id="launchWizardMessages" class="launch-wizard-messages"></div>
+            <div class="launch-wizard-input">
+              <input id="launchWizardInput" type="text" autocomplete="off" />
+              <button id="launchWizardNext" type="button">Gửi</button>
+            </div>
+          </div>
+
+          <label data-market-field="name">
             Tên vật phẩm
             <input id="marketName" type="text" maxlength="60" placeholder="Tối đa 5 từ" required />
           </label>
 
-          <label>
+          <label data-market-field="quantity">
             Số lượng
             <input id="marketQuantity" type="number" min="1" value="1" required />
           </label>
 
-          <label>
+          <label data-market-field="description">
             Mô tả sản phẩm hoặc link thông tin
             <textarea id="marketDescription" rows="3" maxlength="900" placeholder="Tối đa 99 từ" required></textarea>
           </label>
 
-          <label>
+          <label data-market-field="price">
             Giá hữu nghị
             <input id="marketPrice" type="text" inputmode="numeric" placeholder="150,000" required />
           </label>
 
-          <label>
+          <label data-market-field="image">
             Ảnh đính kèm
             <input id="marketImage" type="file" accept="image/*" required />
           </label>
@@ -108,7 +125,7 @@
             </select>
           </label>
 
-          <label>
+          <label data-market-field="contact">
             Contact
             <input id="marketContact" type="text" placeholder="nguyetntm5" required />
           </label>

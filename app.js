@@ -74,6 +74,42 @@ let notificationCount = 0;
 let typingTimer = 0;
 let audioContext = null;
 let editingMarketIndex = null;
+let marketSearchQuery = "";
+let launchWizardStep = 0;
+let launchWizardData = {};
+
+const launchWizardSteps = [
+  {
+    key: "name",
+    question: "Bạn muốn pass lại món gì?",
+    placeholder: "Ví dụ: Bình giữ nhiệt VNG",
+  },
+  {
+    key: "quantity",
+    question: "Số lượng món này là bao nhiêu?",
+    placeholder: "Ví dụ: 1",
+  },
+  {
+    key: "description",
+    question: "Bạn miêu tả chi tiết giúp mình nha: màu sắc, tình trạng, điểm nổi bật... Link thông tin có thể để kèm nếu có.",
+    placeholder: "Ví dụ: màu cam, còn mới, có link...",
+  },
+  {
+    key: "price",
+    question: "Giá hữu nghị cho Starter là bao nhiêu?",
+    placeholder: "Ví dụ: 150,000",
+  },
+  {
+    key: "contact",
+    question: "Cách thức liên hệ của bạn là gì? Bạn có thể điền domain hoặc số điện thoại.",
+    placeholder: "Ví dụ: nguyetntm5",
+  },
+  {
+    key: "image",
+    question: "Bạn đính kèm ảnh vật phẩm nha. Có ảnh thì món đồ mới bay lên phiên chợ được.",
+    placeholder: "",
+  },
+];
 
 const loginPanel = document.querySelector("#loginPanel");
 const loginForm = document.querySelector("#loginForm");
@@ -87,6 +123,9 @@ const chatImage = document.querySelector("#chatImage");
 const choiceRail = document.querySelector("#choiceRail");
 const signalStats = document.querySelector("#signalStats");
 const marketGrid = document.querySelector("#marketGrid");
+const marketSearchForm = document.querySelector("#marketSearchForm");
+const marketSearchInput = document.querySelector("#marketSearchInput");
+const marketSearchStatus = document.querySelector("#marketSearchStatus");
 const marketForm = document.querySelector("#marketForm");
 const marketName = document.querySelector("#marketName");
 const marketQuantity = document.querySelector("#marketQuantity");
@@ -99,6 +138,10 @@ const launchPanel = document.querySelector("#launchPanel");
 const launchStatus = document.querySelector("#launchStatus");
 const launchTitle = document.querySelector(".form-heading h3");
 const launchSubmit = document.querySelector(".submit-launch");
+const launchWizard = document.querySelector("#launchWizard");
+const launchWizardMessages = document.querySelector("#launchWizardMessages");
+const launchWizardInput = document.querySelector("#launchWizardInput");
+const launchWizardNext = document.querySelector("#launchWizardNext");
 const notificationPanel = document.querySelector("#notificationPanel");
 const notificationList = document.querySelector("#notificationList");
 const notificationBadge = document.querySelector("#notificationBadge");
@@ -221,6 +264,15 @@ function sortMarketItems() {
     const bPassed = b.stockStatus === "Đã pass";
     return Number(aPassed) - Number(bPassed);
   });
+}
+
+function scoreMarketItem(item, query) {
+  const tokens = tokenize(query);
+  if (!tokens.length) return 0;
+  const haystack = normalize(
+    `${item.name || ""} ${item.description || ""} ${item.link || ""} ${item.contact || ""}`
+  );
+  return tokens.reduce((score, token) => score + (haystack.includes(token) ? 1 : 0), 0);
 }
 
 function tokenize(value) {
@@ -618,9 +670,24 @@ function handleInput(rawText) {
 function renderMarket() {
   sortMarketItems();
   marketGrid.innerHTML = "";
-  marketItems.forEach((rawItem, index) => {
+  const query = marketSearchQuery.trim();
+  const entries = marketItems.map((rawItem, index) => {
     const item = normalizeMarketItem(rawItem);
     marketItems[index] = item;
+    return { item, index, relevance: scoreMarketItem(item, query) };
+  });
+
+  if (query) {
+    entries.sort((a, b) => b.relevance - a.relevance);
+    const matchCount = entries.filter((entry) => entry.relevance > 0 && !entry.item.hidden).length;
+    marketSearchStatus.textContent = matchCount
+      ? `Radar tìm thấy ${matchCount} món phù hợp và đã đẩy lên đầu phiên chợ.`
+      : "Radar chưa thấy món nào khớp, bạn thử từ khóa khác nha.";
+  } else {
+    marketSearchStatus.textContent = "";
+  }
+
+  entries.forEach(({ item, index, relevance }) => {
     if (item.hidden && !isAdmin()) return;
     const cared = item.caredBy.includes(userMemory.domain);
     const passed = item.stockStatus === "Đã pass";
@@ -628,7 +695,9 @@ function renderMarket() {
     const canEdit = isOwner && !passed && item.editCount < 1;
     const isPremiumCloud = parsePriceValue(item.price) > 50000;
     const card = document.createElement("article");
-    card.className = `market-card ${passed ? "passed" : ""} ${isPremiumCloud ? "premium-cloud" : ""}`;
+    card.className = `market-card ${passed ? "passed" : ""} ${isPremiumCloud ? "premium-cloud" : ""} ${
+      query && relevance > 0 ? "market-match" : ""
+    }`;
     card.dataset.index = index;
     card.innerHTML = `
       <div class="product-image">
@@ -710,10 +779,11 @@ function renderAdmin() {
   foundSection.className = "admin-section";
   foundSection.innerHTML = `
     <h4>Ai đang trả đồ</h4>
-    <div class="admin-table">
+    <div class="admin-table found-admin-table">
       <div class="admin-row admin-head">
         <span>Domain</span>
         <span>Món đồ</span>
+        <span>Thời gian nhặt</span>
         <span>Vị trí nhặt</span>
       </div>
     </div>
@@ -727,6 +797,7 @@ function renderAdmin() {
         <div class="admin-row">
           <span><strong>${item.contact}</strong></span>
           <span>${item.description}</span>
+          <span>${item.date || "chưa rõ ngày"}</span>
           <span>${item.location || "chưa rõ vị trí"}</span>
         </div>
       `;
@@ -811,23 +882,22 @@ function renderNotifications() {
   notificationBadge.textContent = notificationCount;
   notificationList.innerHTML = "";
 
-  if (!visibleNotifications.length) {
-    notificationList.innerHTML = `<p class="empty-note">Chưa có tín hiệu mới.</p>`;
-    return;
-  }
-
   const groups = [
-    ["match", "Radar match đồ"],
-    ["market", "Phiên chợ trên mây"],
-    ["radar", "Tín hiệu radar"],
+    ["match", "Radar match đồ", "Chưa có tín hiệu match mới."],
+    ["market", "Phiên chợ trên mây", "Chưa có tín hiệu quan tâm vật phẩm."],
+    ["radar", "Tín hiệu radar", "Chưa có radar nào đang chờ."],
   ];
 
-  groups.forEach(([type, label]) => {
+  groups.forEach(([type, label, emptyText]) => {
     const items = visibleNotifications.filter((item) => (item.type || "radar") === type);
-    if (!items.length) return;
     const section = document.createElement("section");
     section.className = "notification-group";
     section.innerHTML = `<h4>${label}</h4>`;
+    if (!items.length) {
+      section.innerHTML += `<p class="empty-note group-empty">${emptyText}</p>`;
+      notificationList.append(section);
+      return;
+    }
     items.forEach((item) => {
       const note = document.createElement("article");
       note.className = `signal-note ${(item.readBy || []).includes(userMemory.domain) ? "read" : "unread"}`;
@@ -922,6 +992,85 @@ function readImageAsDataUrl(file) {
   });
 }
 
+function setLaunchChatMode(enabled) {
+  marketForm.classList.toggle("chat-mode", enabled);
+  launchWizard.hidden = !enabled;
+  launchSubmit.hidden = enabled;
+  marketForm.querySelectorAll("[data-market-field]").forEach((field) => {
+    field.hidden = enabled;
+  });
+}
+
+function addLaunchBubble(text, type = "agent") {
+  const bubble = document.createElement("p");
+  bubble.className = `launch-bubble ${type}`;
+  bubble.textContent = text;
+  launchWizardMessages.append(bubble);
+  launchWizardMessages.scrollTop = launchWizardMessages.scrollHeight;
+}
+
+function showLaunchWizardStep() {
+  const step = launchWizardSteps[launchWizardStep];
+  if (!step) return;
+  addLaunchBubble(step.question, "agent");
+  launchWizardInput.value = "";
+  launchWizardInput.placeholder = step.placeholder;
+  launchWizardInput.hidden = step.key === "image";
+  launchWizardNext.textContent = step.key === "image" ? "Hoàn tất" : "Gửi";
+  marketForm.querySelector('[data-market-field="image"]').hidden = step.key !== "image";
+  if (step.key === "image") {
+    marketImage.focus();
+  } else {
+    launchWizardInput.focus();
+  }
+}
+
+function startLaunchWizard() {
+  launchWizardStep = 0;
+  launchWizardData = {};
+  launchWizardMessages.innerHTML = "";
+  setLaunchChatMode(true);
+  marketForm.querySelector('[data-market-field="image"]').hidden = true;
+  showLaunchWizardStep();
+}
+
+function applyLaunchWizardData() {
+  marketName.value = launchWizardData.name || "";
+  marketQuantity.value = launchWizardData.quantity || "1";
+  marketDescription.value = launchWizardData.description || "";
+  marketPrice.value = normalizePrice(launchWizardData.price || "");
+  marketContact.value = launchWizardData.contact || userMemory.domain || "";
+}
+
+function handleLaunchWizardNext() {
+  const step = launchWizardSteps[launchWizardStep];
+  if (!step) return;
+
+  if (step.key === "image") {
+    if (!marketImage.files[0]) {
+      launchStatus.textContent = "Bạn thêm ảnh vật phẩm giúp mình nha.";
+      return;
+    }
+    addLaunchBubble("Đã nhận ảnh vật phẩm.", "user");
+    applyLaunchWizardData();
+    launchStatus.textContent = "";
+    marketForm.requestSubmit();
+    return;
+  }
+
+  const value = launchWizardInput.value.trim();
+  if (!value) {
+    launchStatus.textContent = "Bạn trả lời câu này giúp Artemis nha.";
+    launchWizardInput.focus();
+    return;
+  }
+  launchStatus.textContent = "";
+  launchWizardData[step.key] = value;
+  addLaunchBubble(value, "user");
+  launchWizardStep += 1;
+  showLaunchWizardStep();
+}
+
 function openLaunchFormForCreate() {
   editingMarketIndex = null;
   marketForm.reset();
@@ -932,6 +1081,7 @@ function openLaunchFormForCreate() {
   launchPanel.hidden = false;
   launchStatus.textContent = "";
   if (userMemory.domain) marketContact.value = userMemory.domain;
+  startLaunchWizard();
 }
 
 function openLaunchFormForEdit(index) {
@@ -949,6 +1099,7 @@ function openLaunchFormForEdit(index) {
   marketContact.disabled = !adminEditing;
   marketImage.value = "";
   marketImage.required = false;
+  setLaunchChatMode(false);
   launchTitle.textContent = adminEditing ? "Artemis sửa vật phẩm" : "Sửa vật phẩm đã đăng";
   launchSubmit.textContent = "Lưu chỉnh sửa";
   launchStatus.textContent = adminEditing ? "Artemis có thể chỉnh sửa thông tin vật phẩm khi cần." : "Bạn chỉ được chỉnh sửa món này 1 lần.";
@@ -1003,13 +1154,34 @@ marketPrice.addEventListener("blur", () => {
   marketPrice.value = normalizePrice(marketPrice.value);
 });
 
+marketSearchForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  marketSearchQuery = marketSearchInput.value.trim();
+  renderMarket();
+});
+
+marketSearchInput.addEventListener("input", () => {
+  if (marketSearchInput.value.trim()) return;
+  marketSearchQuery = "";
+  renderMarket();
+});
+
 document.querySelector("#openLaunchForm").addEventListener("click", () => {
   openLaunchFormForCreate();
+});
+
+launchWizardNext.addEventListener("click", handleLaunchWizardNext);
+
+launchWizardInput.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter") return;
+  event.preventDefault();
+  handleLaunchWizardNext();
 });
 
 document.querySelector("#closeLaunchForm").addEventListener("click", () => {
   editingMarketIndex = null;
   marketContact.disabled = false;
+  setLaunchChatMode(false);
   launchPanel.hidden = true;
 });
 
@@ -1048,7 +1220,7 @@ marketForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   if (!validateMarketForm()) return;
   if (editingMarketIndex === null && !marketImage.files[0]) {
-    launchStatus.textContent = "Bạn thêm ảnh vật phẩm giúp mình nha. Chợ trời cần ảnh để mọi người dễ xem.";
+    launchStatus.textContent = "Bạn thêm ảnh vật phẩm giúp mình nha. Phiên chợ trên mây cần ảnh để mọi người dễ xem.";
     marketImage.focus();
     return;
   }
@@ -1102,6 +1274,9 @@ marketForm.addEventListener("submit", async (event) => {
   renderAdmin();
   launchStatus.textContent = "Món đồ của bạn sẽ xuất hiện khi được Artemis duyệt.";
   marketForm.reset();
+  setLaunchChatMode(false);
+  launchPanel.hidden = true;
+  setMoonText("Artemis đã nhận đủ tín hiệu món đồ.\nMón của bạn sẽ xuất hiện khi được duyệt nha.");
 });
 
 adminList.addEventListener("click", (event) => {
