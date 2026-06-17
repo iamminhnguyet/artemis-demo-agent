@@ -12,3 +12,4 @@ __pycache__/
 .greennode.json
 *.log
 *.tmp
+artemis_state.json

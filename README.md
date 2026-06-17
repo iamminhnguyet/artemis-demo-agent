@@ -33,12 +33,14 @@ https://endpoint-0f7feba7-a302-4a7b-91f5-5b49b2a6fc36.agentbase-runtime.aiplatfo
 
 ## Cách hoạt động
 
-Ứng dụng frontend được viết bằng HTML, CSS và JavaScript thuần. Dữ liệu demo như user, tín hiệu radar, thông báo và vật phẩm marketplace được lưu trong `localStorage` của trình duyệt.
+Ứng dụng frontend được viết bằng HTML, CSS và JavaScript thuần. Dữ liệu demo như tín hiệu radar, thông báo và vật phẩm marketplace được đồng bộ qua server JSON state (`GET/POST /api/state`) để nhiều Starter có thể cùng thấy dữ liệu trong cùng một runtime. Trình duyệt vẫn giữ một bản local để demo không bị mất trải nghiệm khi mạng chậm.
 
 Runtime AgentBase dùng server Python nhỏ:
 
 - `GET /` mở giao diện Artemis.
 - `GET /health` trả trạng thái health check cho runtime.
+- `GET /api/state` lấy dữ liệu chung của radar và Phiên chợ trên mây.
+- `POST /api/state` lưu dữ liệu chung để các user khác có thể thấy.
 - `POST /invocations` là endpoint tương thích để AgentBase gọi khi cần.
 
 ## Chạy local
@@ -88,4 +90,4 @@ Người dùng có thể đăng nhập bằng domain-style username bất kỳ, 
 
 Mật khẩu được tạo local trong lần đăng nhập đầu tiên để mô phỏng trải nghiệm an toàn cho demo.
 
-Đây là bản hackathon demo, chưa dùng authentication thật hoặc database backend. Nếu triển khai production, `localStorage` nên được thay bằng backend persistent storage và tích hợp VNG domain SSO.
+Đây là bản hackathon demo, chưa dùng authentication thật hoặc database backend chuyên dụng. Nếu triển khai production, server JSON state nên được thay bằng database persistent storage và tích hợp VNG domain SSO.

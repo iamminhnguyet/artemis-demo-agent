@@ -77,6 +77,8 @@ let editingMarketIndex = null;
 let marketSearchQuery = "";
 let launchWizardStep = 0;
 let launchWizardData = {};
+let remoteSyncReady = false;
+let remoteSaveTimer = 0;
 
 const launchWizardSteps = [
   {
@@ -196,6 +198,7 @@ function saveAuthMemory() {
 
 function saveRadarMemory() {
   localStorage.setItem("starterGalaxyRadar", JSON.stringify(radarMemory));
+  queueRemoteSave();
 }
 
 function sanitizeRadarMemory() {
@@ -235,6 +238,95 @@ function saveMarketState() {
       pendingItems,
     })
   );
+  queueRemoteSave();
+}
+
+function getSharedState() {
+  return {
+    radar: {
+      lostReports: radarMemory.lostReports,
+      foundReports: radarMemory.foundReports,
+      notifications: radarMemory.notifications,
+    },
+    market: {
+      marketItems,
+      pendingItems,
+    },
+  };
+}
+
+function getRecordKey(item, fallbackPrefix, index) {
+  return (
+    item?.id ||
+    [
+      fallbackPrefix,
+      item?.createdAt || "",
+      item?.domain || item?.contact || item?.recipientDomain || "",
+      item?.description || item?.name || item?.message || "",
+      item?.date || item?.price || "",
+    ].join("|") ||
+    `${fallbackPrefix}-${index}`
+  );
+}
+
+function mergeRecords(target, incoming, fallbackPrefix) {
+  if (!Array.isArray(incoming)) return;
+  const seen = new Set(target.map((item, index) => getRecordKey(item, fallbackPrefix, index)));
+  incoming.forEach((item, index) => {
+    const key = getRecordKey(item, fallbackPrefix, index);
+    if (seen.has(key)) return;
+    seen.add(key);
+    target.push(item);
+  });
+}
+
+function replaceRecords(target, incoming) {
+  if (!Array.isArray(incoming) || !incoming.length) return;
+  target.splice(0, target.length, ...incoming);
+}
+
+async function loadSharedState() {
+  try {
+    const response = await fetch("/api/state", { cache: "no-store" });
+    if (!response.ok) throw new Error("Cannot load shared state");
+    const shared = await response.json();
+
+    mergeRecords(radarMemory.lostReports, shared?.radar?.lostReports, "lost");
+    mergeRecords(radarMemory.foundReports, shared?.radar?.foundReports, "found");
+    mergeRecords(radarMemory.notifications, shared?.radar?.notifications, "note");
+    replaceRecords(marketItems, shared?.market?.marketItems);
+    replaceRecords(pendingItems, shared?.market?.pendingItems);
+
+    localStorage.setItem("starterGalaxyRadar", JSON.stringify(radarMemory));
+    localStorage.setItem("starterGalaxyMarket", JSON.stringify({ marketItems, pendingItems }));
+  } catch {
+    // Demo still works locally when the shared server store is unavailable.
+  } finally {
+    remoteSyncReady = true;
+    renderMarket();
+    renderNotifications();
+    renderSignalStats();
+    if (isAdmin()) renderAdmin();
+    queueRemoteSave();
+  }
+}
+
+function queueRemoteSave() {
+  if (!remoteSyncReady) return;
+  clearTimeout(remoteSaveTimer);
+  remoteSaveTimer = window.setTimeout(saveSharedState, 250);
+}
+
+async function saveSharedState() {
+  try {
+    await fetch("/api/state", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(getSharedState()),
+    });
+  } catch {
+    // Keep the local copy; the next interaction will retry.
+  }
 }
 
 function normalizeMarketItem(item) {
@@ -1476,6 +1568,7 @@ renderMarket();
 renderAdmin();
 renderNotifications();
 renderSignalStats();
+loadSharedState();
 setInterval(renderSignalStats, 60000);
 showChatBar(false);
 setMoonText("Nhập domain để Artemis mở cổng vào vũ trụ đồ đạc nhé.");
