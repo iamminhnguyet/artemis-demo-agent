@@ -294,26 +294,38 @@ function scoreReportMatch(report, description, date, image = "") {
   };
 }
 
-function findReportMatch(description, date, image = "") {
-  return radarMemory.lostReports
+function getSortedReportMatches(reports, description, date, image = "", excludeDomain = "", domainKey = "domain") {
+  return reports
+    .filter((report) => !excludeDomain || report[domainKey] !== excludeDomain)
     .map((report) => scoreReportMatch(report, description, date, image))
     .filter((report) => report.matchLevel !== "none")
     .sort((a, b) => {
       if (a.matchLevel !== b.matchLevel) return a.matchLevel === "strong" ? -1 : 1;
       if (a.dateMatch !== b.dateMatch) return a.dateMatch ? -1 : 1;
+      if (a.imageSignal !== b.imageSignal) return a.imageSignal ? -1 : 1;
       return b.score - a.score;
-    })[0];
+    });
 }
 
-function findFoundReportMatch(description, date, image = "") {
-  return radarMemory.foundReports
-    .map((report) => scoreReportMatch(report, description, date, image))
-    .filter((report) => report.matchLevel !== "none")
-    .sort((a, b) => {
-      if (a.matchLevel !== b.matchLevel) return a.matchLevel === "strong" ? -1 : 1;
-      if (a.dateMatch !== b.dateMatch) return a.dateMatch ? -1 : 1;
-      return b.score - a.score;
-    })[0];
+function withAlternatives(matches) {
+  const best = matches[0];
+  if (!best) return null;
+  const alternatives = matches.filter(
+    (item) =>
+      item !== best &&
+      item.matchLevel === best.matchLevel &&
+      item.dateMatch === best.dateMatch &&
+      item.score === best.score
+  );
+  return { ...best, alternatives: alternatives.slice(0, 3) };
+}
+
+function findReportMatch(description, date, image = "", excludeDomain = "") {
+  return withAlternatives(getSortedReportMatches(radarMemory.lostReports, description, date, image, excludeDomain, "domain"));
+}
+
+function findFoundReportMatch(description, date, image = "", excludeDomain = "") {
+  return withAlternatives(getSortedReportMatches(radarMemory.foundReports, description, date, image, excludeDomain, "contact"));
 }
 
 function formatMoonText(text) {
@@ -410,18 +422,24 @@ function getArtemisLiveMinutes() {
   return Math.max(0, Math.floor(diff / 60000));
 }
 
+function countUniqueDomains(items, key) {
+  return new Set(items.map((item) => item[key]).filter(Boolean)).size;
+}
+
 function getResolvedStarterCount() {
   const resolved = new Set();
   radarMemory.notifications.forEach((note) => {
     if (!note.ownerDomain || !note.lostDescription) return;
-    resolved.add(`${note.ownerDomain}::${normalize(note.lostDescription)}`);
+    resolved.add(note.ownerDomain);
   });
   return resolved.size;
 }
 
 function renderSignalStats() {
+  const lostStarterCount = countUniqueDomains(radarMemory.lostReports, "domain");
+  const foundStarterCount = countUniqueDomains(radarMemory.foundReports, "contact");
   signalStats.innerHTML = `
-    <span>Trong <strong>${getArtemisLiveMinutes()}</strong> phút qua, Artemis đã tiếp nhận <strong>${radarMemory.lostReports.length}</strong> tín hiệu tìm đồ & <strong>${radarMemory.foundReports.length}</strong> tín hiệu trả đồ từ Starter,<br />giúp <strong>${getResolvedStarterCount()}</strong> Starter tìm được đồ</span>
+    <span>Trong <strong>${getArtemisLiveMinutes()}</strong> phút qua, Artemis đã tiếp nhận tín hiệu từ <strong>${lostStarterCount}</strong> Starter tìm đồ & <strong>${foundStarterCount}</strong> Starter trả đồ,<br /> giúp <strong>${getResolvedStarterCount()}</strong> Starter tìm được đồ</span>
   `;
   signalStats.classList.remove("pulse");
   requestAnimationFrame(() => signalStats.classList.add("pulse"));
@@ -490,14 +508,15 @@ function handleLostFlow(text) {
     renderSignalStats();
     showChatBar(false);
 
-    const foundMatch = findFoundReportMatch(state.data.description, state.data.date, state.data.image);
+    const foundMatch = findFoundReportMatch(state.data.description, state.data.date, state.data.image, userMemory.domain);
     if (foundMatch) {
       addMatchNotification(lostReport, foundMatch);
       const matchIntro =
         foundMatch.matchLevel === "strong"
           ? "Radar đã tìm được tín hiệu khớp với món bạn mất."
           : "Radar thấy có vẻ như đã tìm được tín hiệu gần giống món bạn mất.";
-      setMoonText(`${matchIntro}\nVị trí nhặt được: ${foundMatch.location || "đang chờ xác nhận"}.\nTụi mình đã gửi thông báo vào ô noti.`);
+      const altText = foundMatch.alternatives?.length ? `\nCó thêm ${foundMatch.alternatives.length} tín hiệu gần giống, bạn kiểm tra trong ô noti nhé.` : "";
+      setMoonText(`${matchIntro}\nContact người trả: ${foundMatch.contact}. Bạn liên hệ thử để xác nhận nhé.\nVị trí nhặt được: ${foundMatch.location || "đang chờ xác nhận"}.${altText}`);
       addMailAction(foundMatch.contact, "Gửi mail cho người trả đồ");
       state.mode = "choose";
       return;
@@ -531,7 +550,7 @@ function handleReturnFlow(text) {
     saveRadarMemory();
     renderSignalStats();
 
-    const match = findReportMatch(state.data.description, state.data.date, state.data.image);
+    const match = findReportMatch(state.data.description, state.data.date, state.data.image, userMemory.domain);
 
     if (match) {
       addMatchNotification(match, foundReport);
@@ -539,7 +558,8 @@ function handleReturnFlow(text) {
         match.matchLevel === "strong"
           ? "Radar đã tìm được chủ nhân."
           : "Radar thấy có vẻ như đã tìm được chủ nhân.";
-      setMoonText(`${matchIntro}\nDomain: ${match.domain}\nNhờ bạn bay phi thuyền trả lại nhé.`);
+      const altText = match.alternatives?.length ? `\nCó thêm ${match.alternatives.length} Starter gần giống, bạn kiểm tra trong ô noti nhé.` : "";
+      setMoonText(`${matchIntro}\nContact người tìm: ${match.domain}. Bạn liên hệ thử để xác nhận nhé.${altText}`);
       addMailAction(match.domain);
     } else {
       setMoonText("Cảm ơn bạn đã phát tín hiệu đến vũ trụ đồ đạc.\nKhi có Starter tìm món này, tụi mình sẽ kết nối hai bạn.");
@@ -646,11 +666,13 @@ function renderMarket() {
 
 function renderAdmin() {
   adminList.innerHTML = "";
+  const lostStarterCount = countUniqueDomains(radarMemory.lostReports, "domain");
+  const foundStarterCount = countUniqueDomains(radarMemory.foundReports, "contact");
   const overview = document.createElement("section");
   overview.className = "admin-overview";
   overview.innerHTML = `
-    <article><strong>${radarMemory.lostReports.length}</strong><span>tín hiệu tìm đồ</span></article>
-    <article><strong>${radarMemory.foundReports.length}</strong><span>tín hiệu trả đồ</span></article>
+    <article><strong>${lostStarterCount}</strong><span>Starter tìm đồ</span></article>
+    <article><strong>${foundStarterCount}</strong><span>Starter trả đồ</span></article>
     <article><strong>${pendingItems.length}</strong><span>vật phẩm chờ duyệt</span></article>
     <article><strong>${marketItems.length}</strong><span>vật phẩm trên chợ</span></article>
   `;
@@ -736,9 +758,9 @@ function renderAdmin() {
         <span>${item.name}${item.edited ? " (edited)" : ""}</span>
         <span>${item.price} / ${item.hidden ? "Đang ẩn" : item.stockStatus || "Còn hàng"}</span>
         <span class="admin-actions">
-          <button type="button" data-admin-edit-market="${index}">Sửa</button>
+          <button type="button" class="admin-edit" data-admin-edit-market="${index}">Sửa</button>
           <button type="button" class="${item.hidden ? "admin-show" : "admin-danger"}" data-toggle-market="${index}">
-            ${item.hidden ? "Hiện lại" : "Ẩn khỏi chợ"}
+            ${item.hidden ? "Hiện" : "Ẩn"}
           </button>
         </span>
       </div>
@@ -773,7 +795,7 @@ function renderAdmin() {
         <span><strong>${item.contact}</strong></span>
         <span>${item.name}</span>
         <span>${item.price} / ${item.quantity}</span>
-        <span><button type="button" data-approve="${index}">Duyệt lên chợ</button></span>
+        <span class="admin-actions"><button type="button" class="admin-approve" data-approve="${index}">Duyệt</button></span>
       </div>
     `;
   });
@@ -783,8 +805,9 @@ function renderNotifications() {
   const visibleNotifications = radarMemory.notifications.filter(
     (item) => item.recipientDomain === userMemory.domain || item.recipientDomain === "*"
   );
+  const unreadNotifications = visibleNotifications.filter((item) => !(item.readBy || []).includes(userMemory.domain));
 
-  notificationCount = visibleNotifications.length;
+  notificationCount = unreadNotifications.length;
   notificationBadge.textContent = notificationCount;
   notificationList.innerHTML = "";
 
@@ -793,20 +816,49 @@ function renderNotifications() {
     return;
   }
 
-  visibleNotifications.forEach((item) => {
-    const note = document.createElement("article");
-    note.className = "signal-note";
-    note.innerHTML = `
-      <p>${item.message}</p>
-      ${item.image ? `<img src="${item.image}" alt="Ảnh vật phẩm được ghi nhận" />` : ""}
-    `;
-    notificationList.append(note);
+  const groups = [
+    ["match", "Radar match đồ"],
+    ["market", "Phiên chợ trên mây"],
+    ["radar", "Tín hiệu radar"],
+  ];
+
+  groups.forEach(([type, label]) => {
+    const items = visibleNotifications.filter((item) => (item.type || "radar") === type);
+    if (!items.length) return;
+    const section = document.createElement("section");
+    section.className = "notification-group";
+    section.innerHTML = `<h4>${label}</h4>`;
+    items.forEach((item) => {
+      const note = document.createElement("article");
+      note.className = `signal-note ${(item.readBy || []).includes(userMemory.domain) ? "read" : "unread"}`;
+      note.innerHTML = `
+        <p>${item.message}</p>
+        ${item.image ? `<img src="${item.image}" alt="Ảnh vật phẩm được ghi nhận" />` : ""}
+      `;
+      section.append(note);
+    });
+    notificationList.append(section);
   });
+}
+
+function markVisibleNotificationsRead() {
+  let changed = false;
+  radarMemory.notifications.forEach((item) => {
+    if (item.recipientDomain !== userMemory.domain && item.recipientDomain !== "*") return;
+    item.readBy = Array.isArray(item.readBy) ? item.readBy : [];
+    if (!item.readBy.includes(userMemory.domain)) {
+      item.readBy.push(userMemory.domain);
+      changed = true;
+    }
+  });
+  if (changed) saveRadarMemory();
+  renderNotifications();
 }
 
 function enableNotification(data) {
   radarMemory.notifications.unshift({
     recipientDomain: data.domain,
+    type: "radar",
     message: `Đã bật radar cho domain ${data.domain}. Khi có tín hiệu khớp với "${data.description}" (${data.date}), Artemis sẽ gửi thông báo về đây.`,
     createdAt: new Date().toISOString(),
   });
@@ -824,9 +876,14 @@ function addMatchNotification(lostReport, foundReport) {
   const isStrong = lostReport.matchLevel === "strong" || foundReport.matchLevel === "strong";
   const ownerPrefix = isStrong ? "Radar vừa bắt được tín hiệu khớp" : "Radar thấy có tín hiệu gần giống";
   const finderPrefix = isStrong ? "Radar đã tìm được chủ nhân" : "Radar thấy có vẻ như đã tìm được chủ nhân";
+  const foundAlternatives = (foundReport.alternatives || []).map((item) => item.contact).filter(Boolean);
+  const lostAlternatives = (lostReport.alternatives || []).map((item) => item.domain).filter(Boolean);
+  const foundAltText = foundAlternatives.length ? ` Có thêm tín hiệu gần giống từ: ${foundAlternatives.join(", ")}.` : "";
+  const lostAltText = lostAlternatives.length ? ` Có thêm Starter gần giống: ${lostAlternatives.join(", ")}.` : "";
   radarMemory.notifications.unshift({
     recipientDomain: lostReport.domain,
-    message: `${ownerPrefix} với món bạn tìm: "${foundReport.description}". Người trả: ${foundReport.contact}. Thời gian nhặt: ${foundReport.date}. Vị trí: ${foundReport.location}.`,
+    type: "match",
+    message: `${ownerPrefix} với món bạn tìm: "${foundReport.description}". Contact người trả: ${foundReport.contact}. Bạn liên hệ thử để xác nhận nhé.${foundAltText} Thời gian nhặt: ${foundReport.date}. Vị trí: ${foundReport.location}.`,
     ownerDomain: lostReport.domain,
     finderDomain: foundReport.contact,
     lostDescription: lostReport.description,
@@ -838,7 +895,8 @@ function addMatchNotification(lostReport, foundReport) {
   });
   radarMemory.notifications.unshift({
     recipientDomain: foundReport.contact,
-    message: `${finderPrefix} cho "${foundReport.description}". Domain người mất: ${lostReport.domain}. Nhờ bạn bay phi thuyền trả lại nhé.`,
+    type: "match",
+    message: `${finderPrefix} cho "${foundReport.description}". Contact người tìm: ${lostReport.domain}. Bạn liên hệ thử để xác nhận nhé.${lostAltText}`,
     ownerDomain: lostReport.domain,
     finderDomain: foundReport.contact,
     lostDescription: lostReport.description,
@@ -867,7 +925,7 @@ function readImageAsDataUrl(file) {
 function openLaunchFormForCreate() {
   editingMarketIndex = null;
   marketForm.reset();
-  marketImage.required = false;
+  marketImage.required = true;
   marketContact.disabled = false;
   launchTitle.textContent = "Phóng vật phẩm lên chợ";
   launchSubmit.textContent = "Submit";
@@ -956,8 +1014,8 @@ document.querySelector("#closeLaunchForm").addEventListener("click", () => {
 });
 
 document.querySelector("#notificationButton").addEventListener("click", () => {
-  renderNotifications();
   notificationPanel.hidden = false;
+  markVisibleNotificationsRead();
 });
 
 document.querySelector("#closeNotificationPanel").addEventListener("click", () => {
@@ -989,6 +1047,11 @@ window.addEventListener("scroll", () => {
 marketForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   if (!validateMarketForm()) return;
+  if (editingMarketIndex === null && !marketImage.files[0]) {
+    launchStatus.textContent = "Bạn thêm ảnh vật phẩm giúp mình nha. Chợ trời cần ảnh để mọi người dễ xem.";
+    marketImage.focus();
+    return;
+  }
   const image = await readImageAsDataUrl(marketImage.files[0]);
   if (editingMarketIndex !== null) {
     const item = normalizeMarketItem(marketItems[editingMarketIndex]);
@@ -1062,8 +1125,8 @@ adminList.addEventListener("click", (event) => {
     renderAdmin();
     setMoonText(
       item.hidden
-        ? `Artemis đã ẩn "${item.name}" khỏi Chợ trời VNG.`
-        : `Artemis đã hiện lại "${item.name}" trên Chợ trời VNG.`
+        ? `Artemis đã ẩn "${item.name}" khỏi Phiên chợ trên mây.`
+        : `Artemis đã hiện lại "${item.name}" trên Phiên chợ trên mây.`
     );
     return;
   }
@@ -1077,7 +1140,7 @@ adminList.addEventListener("click", (event) => {
   saveMarketState();
   renderMarket();
   renderAdmin();
-  setMoonText(`Artemis đã duyệt "${item.name}".\nVật phẩm đã bay lên Chợ trời VNG.`);
+  setMoonText(`Artemis đã duyệt "${item.name}".\nVật phẩm đã bay lên Phiên chợ trên mây.`);
 });
 
 marketGrid.addEventListener("click", (event) => {
@@ -1112,8 +1175,8 @@ marketGrid.addEventListener("click", (event) => {
     showChatBar(false);
     setMoonText(
       willReopen
-        ? `Radar đã mở lại "${item.name}".\nMón này đã quay lại Chợ trời VNG.`
-        : `Radar đã chuyển "${item.name}" sang trạng thái đã pass.\nMón này sẽ bay xuống cuối Chợ trời VNG.`
+        ? `Radar đã mở lại "${item.name}".\nMón này đã quay lại Phiên chợ trên mây.`
+        : `Radar đã chuyển "${item.name}" sang trạng thái đã pass.\nMón này sẽ bay xuống cuối Phiên chợ trên mây.`
     );
     return;
   }
@@ -1141,7 +1204,8 @@ marketGrid.addEventListener("click", (event) => {
   if (!willUncare && item.contact && item.contact !== userMemory.domain) {
     radarMemory.notifications.unshift({
       recipientDomain: item.contact,
-      message: `${userMemory.domain} vừa thả sao quan tâm món "${item.name}" của bạn trong Chợ trời VNG.`,
+      type: "market",
+      message: `${userMemory.domain} vừa thả sao quan tâm món "${item.name}" của bạn trong Phiên chợ trên mây.`,
       itemName: item.name,
       interestedDomain: userMemory.domain,
       createdAt: new Date().toISOString(),
@@ -1213,6 +1277,7 @@ function openDetail(item) {
         : `<p><strong>Link:</strong> Chưa có link đính kèm.</p>`
     }
     <p><strong>Contact:</strong> ${item.contact}</p>
+    <p><strong>Gợi ý:</strong> Starter ping MS Teams để trao đổi nếu có nhu cầu mua nhé.</p>
   `;
   detailPanel.hidden = false;
 }
