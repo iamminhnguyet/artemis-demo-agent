@@ -1,5 +1,6 @@
 .agentbase/
 .claude/
+.docker-codex/
 .git/
 greennode-agentbase-skills-main/
 artemis-vu-tru-do-dac-cho-troi-vng/

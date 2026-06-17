@@ -1,6 +1,12 @@
-# Vu tru do dac - Cho troi VNG
+# Vu tru do dac - Phien cho tren may
 
-Artemis is a space-themed AgentBase demo that helps VNG Starters find lost items, return found items, and pass second-hand items through a lightweight internal marketplace.
+Artemis is a space-themed AgentBase demo for VNG Starters. It helps employees report lost items, return found items, and pass second-hand items through a friendly internal marketplace called "Phien cho tren may".
+
+## Problem
+
+At the moment, VNG does not have one official platform or channel dedicated to lost-and-found item matching. When a Starter loses or finds something, the information is usually scattered across chats, personal posts, or small group messages. This makes it hard to know who owns an item, who found it, and where to contact them.
+
+Artemis creates a lightweight "radar" for the Starter community so lost and found signals can be stored, matched, and surfaced in one place.
 
 ## Live Endpoint
 
@@ -14,14 +20,16 @@ https://endpoint-0f7feba7-a302-4a7b-91f5-5b49b2a6fc36.agentbase-runtime.aiplatfo
 
 ## Main Features
 
-- Domain login with password for each Starter.
-- Lost-item flow: users describe the item, date, and optionally upload an image.
-- Found-item flow: users describe the item, date, location, and optionally upload an image.
-- Radar matching logic based on item description, date, and image signal.
-- Notification center for matched signals and interested marketplace items.
-- Cho troi VNG marketplace for passing second-hand items.
-- Admin approval dashboard for `artemis_8920`.
-- Item editing, sold/pass toggle, hidden/visible admin controls, and star-interest tracking.
+- Domain login with a locally created password for each Starter.
+- Lost-item flow: Starter describes the item, enters the lost date, and can upload an image.
+- Found-item flow: Starter describes the item, enters the found date and location, and can upload an image.
+- Radar matching based on item description, date, and image signal.
+- Match notifications with clear contact points for the person looking for the item and the person returning it.
+- Notification center grouped by radar matches, marketplace signals, and radar reminders.
+- "Phien cho tren may" marketplace for Starters to pass second-hand items.
+- Marketplace items include image, name, quantity, description, price, contact, stock/pass status, and star interest count.
+- Submitted marketplace items require review before appearing publicly.
+- Item owner can edit once, toggle pass status, and see interest signals.
 
 ## How It Works
 
@@ -56,19 +64,16 @@ docker build --platform linux/amd64 -t artemis-starter-galaxy:latest .
 ```text
 index.html      Main page
 styles.css      Space-themed UI styling
-app.js          Chat flow, matching logic, marketplace, admin dashboard
+app.js          Chat flow, matching logic, marketplace, review dashboard
 server.py       Runtime server for AgentBase
 Dockerfile      Container image definition
 assets/         Visual assets and font files
 ```
 
-## Demo Accounts
+## Demo Notes
 
-- Regular user: any VNG domain-style username, for example `nguyetntm5`
-- Admin user: `artemis_8920`
+Regular users can log in with any VNG domain-style username, for example `nguyetntm5`.
 
 Passwords are created locally on first login for demo safety.
-
-## Notes
 
 This hackathon demo does not include production authentication or a backend database. In production, `localStorage` should be replaced with a persistent backend service and VNG domain SSO.
