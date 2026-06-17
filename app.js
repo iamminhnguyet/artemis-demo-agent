@@ -1224,15 +1224,8 @@ loginForm.addEventListener("submit", (event) => {
     return;
   }
 
-  if (authMemory[domain] && authMemory[domain] !== password) {
-    loginStatus.textContent = "Mật khẩu chưa đúng với domain này.";
-    return;
-  }
-
-  if (!authMemory[domain]) {
-    authMemory[domain] = password;
-    saveAuthMemory();
-  }
+  authMemory[domain] = password;
+  saveAuthMemory();
 
   userMemory.domain = domain;
   openAdminPanel.hidden = userMemory.domain !== "artemis_8920";
