@@ -117,6 +117,7 @@ const loginDomain = document.querySelector("#loginDomain");
 const loginPassword = document.querySelector("#loginPassword");
 const loginStatus = document.querySelector("#loginStatus");
 const moonText = document.querySelector("#moonText");
+const radarWordCloud = document.querySelector("#radarWordCloud");
 const chatForm = document.querySelector("#chatForm");
 const chatInput = document.querySelector("#chatInput");
 const chatImage = document.querySelector("#chatImage");
@@ -495,6 +496,20 @@ function renderSignalStats() {
   `;
   signalStats.classList.remove("pulse");
   requestAnimationFrame(() => signalStats.classList.add("pulse"));
+  renderRadarWordCloud();
+}
+
+function renderRadarWordCloud() {
+  const recentSignals = radarMemory.foundReports
+    .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
+    .slice(0, 6);
+
+  radarWordCloud.innerHTML = recentSignals
+    .map((item, index) => `<span style="--i:${index}">${item.description}</span>`)
+    .join("");
+  radarWordCloud.classList.remove("is-refreshing");
+  void radarWordCloud.offsetWidth;
+  radarWordCloud.classList.add("is-refreshing");
 }
 
 function askStart() {
@@ -688,7 +703,7 @@ function renderMarket() {
   }
 
   entries.forEach(({ item, index, relevance }) => {
-    if (item.hidden && !isAdmin()) return;
+    if (item.hidden) return;
     const cared = item.caredBy.includes(userMemory.domain);
     const passed = item.stockStatus === "Đã pass";
     const isOwner = item.contact === userMemory.domain;

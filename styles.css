@@ -291,6 +291,34 @@ button {
   filter: drop-shadow(0 0 44px rgba(95, 235, 255, 0.72));
 }
 
+.radar-word-cloud {
+  position: absolute;
+  inset: -18% -24%;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.radar-word-cloud span {
+  position: absolute;
+  max-width: 180px;
+  color: rgba(255, 255, 255, 0.34);
+  font-family: var(--body);
+  font-size: clamp(0.72rem, 0.95vw, 0.92rem);
+  font-weight: 900;
+  line-height: 1.2;
+  text-shadow: 0 2px 0 rgba(32, 16, 100, 0.14);
+  opacity: 0;
+  animation: wordSignalIn 4.8s ease-in-out forwards;
+  animation-delay: calc(var(--i) * 0.12s);
+}
+
+.radar-word-cloud span:nth-child(1) { top: 12%; left: 8%; }
+.radar-word-cloud span:nth-child(2) { top: 18%; right: 7%; }
+.radar-word-cloud span:nth-child(3) { bottom: 14%; left: 3%; }
+.radar-word-cloud span:nth-child(4) { bottom: 12%; right: 4%; }
+.radar-word-cloud span:nth-child(5) { top: 48%; left: -8%; }
+.radar-word-cloud span:nth-child(6) { top: 48%; right: -8%; }
+
 .moon-text {
   position: absolute;
   top: 48%;
@@ -1498,6 +1526,24 @@ button {
   50% {
     opacity: 1;
     transform: scale(1.04);
+  }
+}
+
+@keyframes wordSignalIn {
+  0% {
+    opacity: 0;
+    transform: translateY(8px) scale(0.94);
+  }
+
+  22%,
+  78% {
+    opacity: 0.42;
+    transform: translateY(0) scale(1);
+  }
+
+  100% {
+    opacity: 0.24;
+    transform: translateY(-6px) scale(0.98);
   }
 }
 

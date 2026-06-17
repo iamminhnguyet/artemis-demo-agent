@@ -1,14 +1,14 @@
-# Vu tru do dac - Phien cho tren may
+# Vũ trụ đồ đạc - Phiên chợ trên mây
 
-Artemis is a space-themed AgentBase demo for VNG Starters. It helps employees report lost items, return found items, and pass second-hand items through a friendly internal marketplace called "Phien cho tren may".
+Artemis là demo AgentBase theo theme vũ trụ dành cho Starter tại VNG. Agent giúp mọi người gửi tín hiệu tìm đồ thất lạc, trả lại đồ nhặt được, nhận thông báo khi có tín hiệu phù hợp, và pass lại đồ cũ qua khu "Phiên chợ trên mây".
 
-## Problem
+## Vấn đề
 
-At the moment, VNG does not have one official platform or channel dedicated to lost-and-found item matching. When a Starter loses or finds something, the information is usually scattered across chats, personal posts, or small group messages. This makes it hard to know who owns an item, who found it, and where to contact them.
+Hiện tại VNG chưa có một platform hoặc channel chính thống dành riêng cho việc tìm và trả đồ thất lạc. Khi một Starter làm mất hoặc nhặt được đồ, thông tin thường bị phân tán ở chat cá nhân, nhóm nhỏ, hoặc các bài đăng rời rạc. Vì vậy người mất khó biết ai đang giữ món đồ, còn người nhặt được cũng khó tìm đúng chủ nhân.
 
-Artemis creates a lightweight "radar" for the Starter community so lost and found signals can be stored, matched, and surfaced in one place.
+Artemis đóng vai trò như một radar nội bộ: ghi nhận tín hiệu, lưu thông tin, tự dò các tín hiệu gần giống nhau và gợi ý contact point để hai bên kết nối nhanh hơn.
 
-## Live Endpoint
+## Live endpoint
 
 https://endpoint-0f7feba7-a302-4a7b-91f5-5b49b2a6fc36.agentbase-runtime.aiplatform.vngcloud.vn/
 
@@ -18,62 +18,74 @@ Health check:
 https://endpoint-0f7feba7-a302-4a7b-91f5-5b49b2a6fc36.agentbase-runtime.aiplatform.vngcloud.vn/health
 ```
 
-## Main Features
+## Tính năng chính
 
-- Domain login with a locally created password for each Starter.
-- Lost-item flow: Starter describes the item, enters the lost date, and can upload an image.
-- Found-item flow: Starter describes the item, enters the found date and location, and can upload an image.
-- Radar matching based on item description, date, and image signal.
-- Match notifications with clear contact points for the person looking for the item and the person returning it.
-- Notification center grouped by radar matches, marketplace signals, and radar reminders.
-- "Phien cho tren may" marketplace for Starters to pass second-hand items.
-- Marketplace items include image, name, quantity, description, price, contact, stock/pass status, and star interest count.
-- Submitted marketplace items require review before appearing publicly.
-- Item owner can edit once, toggle pass status, and see interest signals.
+- Đăng nhập bằng domain và tạo mật khẩu để lần sau quay lại nhận thông báo từ radar Artemis.
+- Flow tìm đồ thất lạc: Starter mô tả món đồ, nhập thời gian mất và có thể đính kèm ảnh.
+- Flow trả lại đồ bị mất: Starter mô tả món đồ, nhập thời gian nhặt được, vị trí nhặt được và có thể đính kèm ảnh.
+- Radar match theo mô tả món đồ, thời gian và tín hiệu ảnh.
+- Nếu match chính xác hoặc gần giống, Artemis trả contact point ngay trên mặt trăng radar và lưu vào ô thông báo.
+- Ô thông báo được chia nhóm: Radar match đồ, Phiên chợ trên mây, Tín hiệu radar.
+- Dashboard quản trị để xem tổng quan tín hiệu tìm/trả đồ, duyệt vật phẩm, chỉnh sửa, ẩn/hiện vật phẩm khi cần.
+- Phiên chợ trên mây cho Starter pass lại đồ cũ, có ảnh sản phẩm, mô tả, giá, contact, trạng thái còn hàng/đã pass và số lượt quan tâm.
+- Flow đăng vật phẩm dạng chat: Artemis hỏi từng câu rồi tự đưa thông tin vào template vật phẩm.
+- Thanh tìm kiếm trong Phiên chợ trên mây: Starter nhập món cần mua, Artemis đẩy các món phù hợp lên đầu.
 
-## How It Works
+## Cách hoạt động
 
-The frontend is a vanilla HTML/CSS/JavaScript app. User data, radar reports, notifications, and marketplace items are stored in browser `localStorage` for demo purposes.
+Ứng dụng frontend được viết bằng HTML, CSS và JavaScript thuần. Dữ liệu demo như user, tín hiệu radar, thông báo và vật phẩm marketplace được lưu trong `localStorage` của trình duyệt.
 
-The AgentBase deployment uses a small Python server:
+Runtime AgentBase dùng server Python nhỏ:
 
-- `GET /` serves the Artemis UI.
-- `GET /health` returns server health for AgentBase runtime checks.
-- `POST /invocations` provides a simple compatibility endpoint.
+- `GET /` mở giao diện Artemis.
+- `GET /health` trả trạng thái health check cho runtime.
+- `POST /invocations` là endpoint tương thích để AgentBase gọi khi cần.
 
-## Local Run
+## Chạy local
 
 ```powershell
 python server.py
 ```
 
-Then open:
+Sau đó mở:
 
 ```text
 http://127.0.0.1:8080/
 ```
 
-## Docker Build
+Nếu muốn chạy bằng static server:
+
+```powershell
+python -m http.server 4173
+```
+
+Sau đó mở:
+
+```text
+http://127.0.0.1:4173/
+```
+
+## Build Docker
 
 ```bash
 docker build --platform linux/amd64 -t artemis-starter-galaxy:latest .
 ```
 
-## Project Structure
+## Cấu trúc project
 
 ```text
-index.html      Main page
-styles.css      Space-themed UI styling
-app.js          Chat flow, matching logic, marketplace, review dashboard
-server.py       Runtime server for AgentBase
-Dockerfile      Container image definition
-assets/         Visual assets and font files
+index.html      Giao diện chính
+styles.css      Styling theme vũ trụ, mặt trăng, phiên chợ và dashboard
+app.js          Logic chat flow, radar matching, thông báo, marketplace và dashboard
+server.py       Server runtime cho AgentBase
+Dockerfile      Cấu hình container image
+assets/         Hình ảnh, font và visual assets
 ```
 
-## Demo Notes
+## Ghi chú demo
 
-Regular users can log in with any VNG domain-style username, for example `nguyetntm5`.
+Người dùng có thể đăng nhập bằng domain-style username bất kỳ, ví dụ `nguyetntm5`.
 
-Passwords are created locally on first login for demo safety.
+Mật khẩu được tạo local trong lần đăng nhập đầu tiên để mô phỏng trải nghiệm an toàn cho demo.
 
-This hackathon demo does not include production authentication or a backend database. In production, `localStorage` should be replaced with a persistent backend service and VNG domain SSO.
+Đây là bản hackathon demo, chưa dùng authentication thật hoặc database backend. Nếu triển khai production, `localStorage` nên được thay bằng backend persistent storage và tích hợp VNG domain SSO.
