@@ -11,5 +11,11 @@ proxy.py
 .env.*
 .greennode.json
 *.log
+*.tmp
 __pycache__/
 *.pyc
+.artemis-data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm

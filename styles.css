@@ -301,23 +301,23 @@ button {
 .radar-word-cloud span {
   position: absolute;
   max-width: 180px;
-  color: rgba(255, 255, 255, 0.34);
+  color: rgba(255, 255, 255, 0.58);
   font-family: var(--body);
   font-size: clamp(0.72rem, 0.95vw, 0.92rem);
   font-weight: 900;
   line-height: 1.2;
-  text-shadow: 0 2px 0 rgba(32, 16, 100, 0.14);
+  text-shadow: 0 2px 0 rgba(32, 16, 100, 0.2), 0 0 12px rgba(255, 255, 255, 0.18);
   opacity: 0;
   animation: wordSignalIn 4.8s ease-in-out forwards;
   animation-delay: calc(var(--i) * 0.12s);
 }
 
-.radar-word-cloud span:nth-child(1) { top: 12%; left: 8%; }
-.radar-word-cloud span:nth-child(2) { top: 18%; right: 7%; }
-.radar-word-cloud span:nth-child(3) { bottom: 14%; left: 3%; }
-.radar-word-cloud span:nth-child(4) { bottom: 12%; right: 4%; }
-.radar-word-cloud span:nth-child(5) { top: 48%; left: -8%; }
-.radar-word-cloud span:nth-child(6) { top: 48%; right: -8%; }
+.radar-word-cloud span:nth-child(1) { top: 16%; left: 8%; }
+.radar-word-cloud span:nth-child(2) { top: 22%; right: 8%; }
+.radar-word-cloud span:nth-child(3) { bottom: 18%; left: 5%; }
+.radar-word-cloud span:nth-child(4) { bottom: 16%; right: 5%; }
+.radar-word-cloud span:nth-child(5) { top: 50%; left: -2%; }
+.radar-word-cloud span:nth-child(6) { top: 50%; right: -2%; }
 
 .moon-text {
   position: absolute;
@@ -1171,6 +1171,10 @@ button {
   background: rgba(64, 32, 147, 0.1);
 }
 
+.launch-wizard-input.image-step {
+  grid-template-columns: 1fr;
+}
+
 .launch-wizard-input input {
   border-radius: 999px;
 }
@@ -1187,10 +1191,22 @@ button {
   box-shadow: 0 5px 0 rgba(64, 32, 147, 0.16);
 }
 
+.launch-wizard-input.image-step button {
+  width: 100%;
+}
+
 .launch-form [data-market-field="image"]:not([hidden]) {
   border-radius: 22px;
   padding: 14px;
   background: rgba(255, 255, 255, 0.58);
+}
+
+.launch-wizard [data-market-field="image"]:not([hidden]) {
+  order: 2;
+}
+
+.launch-wizard .launch-wizard-input {
+  order: 3;
 }
 
 .submit-launch {
@@ -1358,6 +1374,37 @@ button {
 
 .market-admin-table .admin-row {
   grid-template-columns: 0.85fr 1.35fr 1fr auto;
+}
+
+.market-admin-table .admin-product-row {
+  grid-template-columns: 0.75fr 1.7fr 0.85fr auto;
+  align-items: start;
+}
+
+.admin-product-info {
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+}
+
+.admin-product-info img {
+  width: 58px;
+  height: 58px;
+  border-radius: 14px;
+  object-fit: cover;
+  background: rgba(64, 32, 147, 0.08);
+}
+
+.admin-product-info small {
+  display: -webkit-box;
+  margin-top: 3px;
+  overflow: hidden;
+  color: rgba(57, 32, 118, 0.72);
+  font-size: 0.78rem;
+  line-height: 1.3;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .found-admin-table .admin-row {

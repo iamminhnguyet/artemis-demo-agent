@@ -4,15 +4,15 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Vũ trụ đồ đạc - Phiên chợ trên mây</title>
-    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="styles.css?v=backend-v18" />
   </head>
   <body>
     <section id="loginPanel" class="login-panel" aria-label="Đăng nhập domain">
       <form id="loginForm" class="login-form">
         <h2>Vũ trụ đồ đạc - Phiên chợ trên mây</h2>
-        <p>Hãy nhập domain và tạo mật khẩu để lần sau đăng nhập, đồng thời nhận thông báo từ radar Artemis nhé.</p>
+        <p>Hãy nhập domain để Artemis ghi nhớ tín hiệu và gửi thông báo radar về đúng bạn nhé.</p>
         <input id="loginDomain" type="text" placeholder="Nhập domain của bạn" required />
-        <input id="loginPassword" type="password" placeholder="Tạo hoặc nhập mật khẩu" required />
+        <input id="loginPassword" type="password" placeholder="Mật khẩu domain của bạn" />
         <p id="loginStatus" class="login-status" aria-live="polite"></p>
         <button type="submit">Bay vào vũ trụ</button>
       </form>
@@ -167,7 +167,7 @@
       </button>
     </main>
 
-    <script src="app.js?v=asset-clean-final"></script>
+    <script src="app.js?v=backend-v18"></script>
   </body>
 </html>
 

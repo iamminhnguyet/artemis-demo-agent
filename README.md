@@ -21,7 +21,7 @@ https://endpoint-0f7feba7-a302-4a7b-91f5-5b49b2a6fc36.agentbase-runtime.aiplatfo
 Image dùng cho bản nộp:
 
 ```text
-vcr.vngcloud.vn/111480-abp111668/artemis-starter-galaxy:submission-final-9
+docker.io/iamminhnguyet/artemis-starter-galaxy:backend-v17
 ```
 
 ## Tính năng chính
@@ -41,13 +41,28 @@ vcr.vngcloud.vn/111480-abp111668/artemis-starter-galaxy:submission-final-9
 
 Frontend được viết bằng HTML, CSS và JavaScript thuần. Runtime AgentBase dùng server Python nhỏ để phục vụ giao diện và health check.
 
-Dữ liệu trong bản hackathon demo được lưu ở trình duyệt để mô phỏng trải nghiệm nhanh, không yêu cầu database riêng. Nếu triển khai production, Artemis nên dùng backend database/persistent storage để mọi user cùng thấy dữ liệu realtime, đồng thời tích hợp VNG domain SSO.
+Dữ liệu submission hiện được lưu qua backend SQLite để nhiều user và nhiều trình duyệt cùng thấy tín hiệu lost/found, marketplace và trạng thái duyệt. Trình duyệt vẫn giữ bản lưu tạm để giao diện không bị gãy khi backend tạm thời chưa kết nối được.
 
 Runtime hỗ trợ:
 
 - `GET /` mở giao diện Artemis.
 - `GET /health` trả trạng thái health check cho runtime.
 - `POST /invocations` là endpoint tương thích để AgentBase gọi khi cần.
+
+## Backend persistence
+
+Artemis lưu dữ liệu dùng chung bằng SQLite thông qua `server.py`. Mặc định file database nằm ở `.artemis-data/artemis.db` trong thư mục project. Khi deploy AgentBase nên đặt `ARTEMIS_DB=/tmp/artemis-data/artemis.db`; nếu muốn dùng đường dẫn khác, cấu hình biến môi trường `ARTEMIS_DB`.
+
+API routes:
+
+- `POST /api/lost-items`, `GET /api/lost-items`
+- `POST /api/found-items`, `GET /api/found-items`
+- `POST /api/marketplace-items`, `GET /api/marketplace-items?status=approved`
+- `GET /api/admin/marketplace-items?status=pending`
+- `PATCH /api/admin/marketplace-items/:id/approve`
+- `PATCH /api/admin/marketplace-items/:id/reject`
+- `GET /api/matches/:itemId`
+- `GET /api/state`, `POST /api/state` vẫn được giữ để tương thích ngược.
 
 ## Chạy local
 
@@ -65,6 +80,66 @@ http://127.0.0.1:8080/
 
 ```bash
 docker build --platform linux/amd64 -t artemis-starter-galaxy:latest .
+```
+
+Build và push image đang deploy:
+
+```powershell
+docker build --platform linux/amd64 -t artemis-starter-galaxy:backend-v17 .
+docker tag artemis-starter-galaxy:backend-v17 iamminhnguyet/artemis-starter-galaxy:backend-v17
+docker push iamminhnguyet/artemis-starter-galaxy:backend-v17
+```
+
+Image dùng cho AgentBase:
+
+```text
+docker.io/iamminhnguyet/artemis-starter-galaxy:backend-v17
+```
+
+Biến môi trường khuyến nghị cho AgentBase:
+
+```text
+PORT=8080
+ARTEMIS_DB=/tmp/artemis-data/artemis.db
+```
+
+## Upload lên GitHub
+
+Các file/thư mục nên commit:
+
+```text
+index.html
+styles.css
+app.js
+server.py
+Dockerfile
+README.md
+.gitignore
+.dockerignore
+assets/
+```
+
+Không commit file/thư mục local/runtime:
+
+```text
+.artemis-data/
+__pycache__/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.tmp
+write-test.tmp
+.env
+.agentbase/
+.claude/
+.docker-codex/
+submission-guide.docx
+submission-guide.txt
+app-v2.js
+proxy.py
+greennode-agentbase-skills-main/
+artemis-vu-tru-do-dac-cho-troi-vng/
 ```
 
 ## Cấu trúc project

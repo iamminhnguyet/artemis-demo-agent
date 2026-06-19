@@ -36,6 +36,7 @@ sanitizeRadarMemory();
 
 const defaultMarketItems = [
   {
+    id: "seed-market-1",
     name: "Túi giữ nhiệt VNG",
     price: "150,000đ",
     quantity: "1",
@@ -51,6 +52,7 @@ const defaultMarketItems = [
     image: "assets/demo-product-1.jpg",
   },
   {
+    id: "seed-market-2",
     name: "Card bo góc Miu Lê",
     price: "5,000đ",
     quantity: "8",
@@ -70,6 +72,17 @@ const defaultMarketItems = [
 const marketState = loadMarketState();
 const marketItems = marketState.marketItems;
 const pendingItems = marketState.pendingItems;
+defaultMarketItems.forEach((seed) => {
+  if (
+    !marketItems.some(
+      (item) =>
+        item.id === seed.id ||
+        (normalize(item.name || "") === normalize(seed.name || "") && normalize(item.contact || "") === normalize(seed.contact || ""))
+    )
+  ) {
+    marketItems.push(JSON.parse(JSON.stringify(seed)));
+  }
+});
 let notificationCount = 0;
 let typingTimer = 0;
 let audioContext = null;
@@ -79,6 +92,90 @@ let launchWizardStep = 0;
 let launchWizardData = {};
 let remoteSyncReady = false;
 let remoteSaveTimer = 0;
+let backendWarningShown = false;
+
+const dataService = {
+  async request(path, options = {}) {
+    const response = await fetch(path, {
+      cache: "no-store",
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...(options.headers || {}),
+      },
+    });
+    if (!response.ok) {
+      const error = new Error(`Artemis API error: ${response.status}`);
+      error.status = response.status;
+      try {
+        error.payload = await response.json();
+      } catch {
+        error.payload = {};
+      }
+      throw error;
+    }
+    return response.json();
+  },
+  async loadState() {
+    return this.request("/api/state");
+  },
+  async login(domain, password) {
+    return this.request("/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ domain, password }),
+    });
+  },
+  async createLostItem(item) {
+    return this.request("/api/lost-items", {
+      method: "POST",
+      body: JSON.stringify(item),
+    });
+  },
+  async createFoundItem(item) {
+    return this.request("/api/found-items", {
+      method: "POST",
+      body: JSON.stringify(item),
+    });
+  },
+  async createMarketplaceItem(item) {
+    return this.request("/api/marketplace-items", {
+      method: "POST",
+      body: JSON.stringify(item),
+    });
+  },
+  async updateMarketplaceItem(item) {
+    if (!item?.id) return item;
+    return this.request(`/api/marketplace-items/${encodeURIComponent(item.id)}`, {
+      method: "PATCH",
+      body: JSON.stringify(item),
+    });
+  },
+  async approveMarketplaceItem(item, actor) {
+    return this.request(`/api/admin/marketplace-items/${encodeURIComponent(item.id)}/approve`, {
+      method: "PATCH",
+      body: JSON.stringify({ actor, updates: item }),
+    });
+  },
+  async rejectMarketplaceItem(item, actor) {
+    return this.request(`/api/admin/marketplace-items/${encodeURIComponent(item.id)}/reject`, {
+      method: "PATCH",
+      body: JSON.stringify({ actor, updates: item }),
+    });
+  },
+  async createNotification(note) {
+    return this.request("/api/notifications", {
+      method: "POST",
+      body: JSON.stringify(note),
+    });
+  },
+};
+
+function showBackendWarning() {
+  if (backendWarningShown) return;
+  backendWarningShown = true;
+  const target = launchStatus || marketSearchStatus || loginStatus;
+  if (target) target.textContent = "Artemis đang dùng bản lưu tạm trên trình duyệt vì chưa kết nối được backend.";
+}
 
 const launchWizardSteps = [
   {
@@ -135,6 +232,9 @@ const marketQuantity = document.querySelector("#marketQuantity");
 const marketDescription = document.querySelector("#marketDescription");
 const marketPrice = document.querySelector("#marketPrice");
 const marketImage = document.querySelector("#marketImage");
+const marketImageField = marketForm.querySelector('[data-market-field="image"]');
+const marketImageOriginalParent = marketImageField.parentElement;
+const marketImageOriginalNext = marketImageField.nextElementSibling;
 const marketStockStatus = document.querySelector("#marketStockStatus");
 const marketContact = document.querySelector("#marketContact");
 const launchPanel = document.querySelector("#launchPanel");
@@ -196,9 +296,17 @@ function saveAuthMemory() {
   localStorage.setItem("starterGalaxyAuth", JSON.stringify(authMemory));
 }
 
+function enterGalaxy(domain) {
+  userMemory.domain = domain;
+  openAdminPanel.hidden = userMemory.domain !== "artemis_8920";
+  renderMarket();
+  renderNotifications();
+  loginPanel.hidden = true;
+  askStart();
+}
+
 function saveRadarMemory() {
   localStorage.setItem("starterGalaxyRadar", JSON.stringify(radarMemory));
-  queueRemoteSave();
 }
 
 function sanitizeRadarMemory() {
@@ -238,7 +346,6 @@ function saveMarketState() {
       pendingItems,
     })
   );
-  queueRemoteSave();
 }
 
 function getSharedState() {
@@ -285,29 +392,71 @@ function replaceRecords(target, incoming) {
   target.splice(0, target.length, ...incoming);
 }
 
+function mergeOrUpdateRecords(target, incoming, fallbackPrefix) {
+  if (!Array.isArray(incoming)) return;
+  incoming.forEach((item, index) => {
+    const key = getRecordKey(item, fallbackPrefix, index);
+    const existingIndex = target.findIndex((targetItem, targetIndex) => getRecordKey(targetItem, fallbackPrefix, targetIndex) === key);
+    if (existingIndex >= 0) {
+      target[existingIndex] = { ...target[existingIndex], ...item };
+      return;
+    }
+    target.push(item);
+  });
+}
+
+function reconcileServerRecords(target, incoming, fallbackPrefix) {
+  if (!Array.isArray(incoming)) return;
+  const serverRecords = incoming.map((item) => ({ ...item, _localPending: false }));
+  const serverKeys = new Set(serverRecords.map((item, index) => getRecordKey(item, fallbackPrefix, index)));
+  const now = Date.now();
+  const localPending = target.filter((item, index) => {
+    if (!item?._localPending) return false;
+    if (serverKeys.has(getRecordKey(item, fallbackPrefix, index))) return false;
+    return now - Number(item._localCreatedAt || 0) < 120000;
+  });
+  target.splice(0, target.length, ...localPending, ...serverRecords);
+}
+
+function ensureDefaultMarketItems() {
+  defaultMarketItems.forEach((seed) => {
+    const exists = marketItems.some(
+      (item) =>
+        item.id === seed.id ||
+        (normalize(item.name || "") === normalize(seed.name || "") && normalize(item.contact || "") === normalize(seed.contact || ""))
+    );
+    if (!exists) marketItems.push(JSON.parse(JSON.stringify(seed)));
+  });
+}
+
+function replaceRecordsExact(target, incoming) {
+  if (!Array.isArray(incoming)) return;
+  target.splice(0, target.length, ...incoming);
+}
+
 async function loadSharedState() {
   try {
-    const response = await fetch("/api/state", { cache: "no-store" });
-    if (!response.ok) throw new Error("Cannot load shared state");
-    const shared = await response.json();
+    const shared = await dataService.loadState();
 
-    mergeRecords(radarMemory.lostReports, shared?.radar?.lostReports, "lost");
-    mergeRecords(radarMemory.foundReports, shared?.radar?.foundReports, "found");
+    reconcileServerRecords(radarMemory.lostReports, shared?.radar?.lostReports, "lost");
+    reconcileServerRecords(radarMemory.foundReports, shared?.radar?.foundReports, "found");
     mergeRecords(radarMemory.notifications, shared?.radar?.notifications, "note");
-    replaceRecords(marketItems, shared?.market?.marketItems);
-    replaceRecords(pendingItems, shared?.market?.pendingItems);
+    sanitizeRadarMemory();
+    generateMissingMatchNotifications();
+    reconcileServerRecords(marketItems, shared?.market?.marketItems, "market");
+    ensureDefaultMarketItems();
+    reconcileServerRecords(pendingItems, shared?.market?.pendingItems, "pending");
 
     localStorage.setItem("starterGalaxyRadar", JSON.stringify(radarMemory));
     localStorage.setItem("starterGalaxyMarket", JSON.stringify({ marketItems, pendingItems }));
   } catch {
-    // Demo still works locally when the shared server store is unavailable.
+    showBackendWarning();
   } finally {
     remoteSyncReady = true;
     renderMarket();
     renderNotifications();
     renderSignalStats();
     if (isAdmin()) renderAdmin();
-    queueRemoteSave();
   }
 }
 
@@ -329,6 +478,15 @@ async function saveSharedState() {
   }
 }
 
+async function persistOrWarn(operation) {
+  try {
+    return await operation();
+  } catch {
+    showBackendWarning();
+    return null;
+  }
+}
+
 function normalizeMarketItem(item) {
   const imageMap = {
     "assets/demo san pham 1.jpg": "assets/demo-product-1.jpg",
@@ -338,6 +496,7 @@ function normalizeMarketItem(item) {
 
   return {
     ...item,
+    ownerDomain: item.ownerDomain || item.contact || "",
     image: imageMap[item.image] || item.image,
     careCount: Number(item.careCount) || 0,
     caredBy: Array.isArray(item.caredBy) ? item.caredBy : [],
@@ -345,6 +504,38 @@ function normalizeMarketItem(item) {
     edited: Boolean(item.edited),
     hidden: Boolean(item.hidden),
   };
+}
+
+function hasSensitiveMarketplaceContent(item) {
+  const content = normalize(`${item.name || ""} ${item.description || ""} ${item.link || ""} ${item.contact || ""}`);
+  const blockedTerms = [
+    "mat khau",
+    "password",
+    "otp",
+    "cccd",
+    "cmnd",
+    "tai khoan ngan hang",
+    "bank account",
+    "chuyen khoan truoc",
+    "lừa đảo",
+    "lua dao",
+    "scam",
+    "token",
+    "secret",
+  ];
+  return blockedTerms.some((term) => content.includes(normalize(term)));
+}
+
+function shouldAutoApproveMarketplaceItem(item) {
+  return Boolean(
+    item.image &&
+      item.name &&
+      item.quantity &&
+      item.description &&
+      item.price &&
+      item.contact &&
+      !hasSensitiveMarketplaceContent(item)
+  );
 }
 
 function isAdmin() {
@@ -417,23 +608,32 @@ function normalizeDateText(value = "") {
   return normalize(value).replace(/[^0-9]/g, "");
 }
 
+function isDateRelated(source = "", target = "") {
+  const sourceDigits = normalizeDateText(source);
+  const targetDigits = normalizeDateText(target);
+  if (!sourceDigits || !targetDigits) return false;
+  return sourceDigits === targetDigits || sourceDigits.includes(targetDigits) || targetDigits.includes(sourceDigits);
+}
+
 function scoreReportMatch(report, description, date, image = "") {
   const score = scoreDescription(report.description || "", description || "");
   const reportTokenCount = new Set(tokenize(report.description || "")).size;
   const queryTokenCount = new Set(tokenize(description || "")).size;
   const neededStrongScore = Math.min(2, Math.max(1, Math.min(reportTokenCount, queryTokenCount)));
   const dateMatch = Boolean(date && report.date && normalizeDateText(report.date) === normalizeDateText(date));
+  const dateRelated = !dateMatch && Boolean(date && report.date && isDateRelated(report.date, date));
   const imageSignal = Boolean(image && report.image);
   const level =
     score >= neededStrongScore && dateMatch
       ? "strong"
-      : score >= 2 || (score >= 1 && dateMatch) || (imageSignal && score >= 1)
+      : score >= 2 || (score >= 1 && (dateMatch || dateRelated)) || (imageSignal && score >= 1)
         ? "near"
         : "none";
   return {
     ...report,
     score,
     dateMatch,
+    dateRelated,
     imageSignal,
     matchLevel: level,
   };
@@ -471,6 +671,41 @@ function findReportMatch(description, date, image = "", excludeDomain = "") {
 
 function findFoundReportMatch(description, date, image = "", excludeDomain = "") {
   return withAlternatives(getSortedReportMatches(radarMemory.foundReports, description, date, image, excludeDomain, "contact"));
+}
+
+function normalizeMatchText(value) {
+  return normalize(value || "").replace(/\s+/g, " ").trim();
+}
+
+function hasMatchNotification(lostReport, foundReport) {
+  const ownerDomain = lostReport.domain || "";
+  const finderDomain = foundReport.contact || "";
+  const lostDescription = normalizeMatchText(lostReport.description);
+  const foundDescription = normalizeMatchText(foundReport.description);
+  return radarMemory.notifications.some(
+    (note) =>
+      note.type === "match" &&
+      note.ownerDomain === ownerDomain &&
+      note.finderDomain === finderDomain &&
+      normalizeMatchText(note.lostDescription) === lostDescription &&
+      normalizeMatchText(note.foundDescription) === foundDescription
+  );
+}
+
+function generateMissingMatchNotifications() {
+  let created = false;
+  radarMemory.lostReports.forEach((lostReport) => {
+    const foundMatch = findFoundReportMatch(
+      lostReport.description,
+      lostReport.date,
+      lostReport.image,
+      lostReport.domain
+    );
+    if (!foundMatch || hasMatchNotification(lostReport, foundMatch)) return;
+    addMatchNotification(lostReport, foundMatch);
+    created = true;
+  });
+  return created;
 }
 
 function formatMoonText(text) {
@@ -571,33 +806,59 @@ function countUniqueDomains(items, key) {
   return new Set(items.map((item) => item[key]).filter(Boolean)).size;
 }
 
+function createClientId(prefix) {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
 function getResolvedStarterCount() {
   const resolved = new Set();
   radarMemory.notifications.forEach((note) => {
     if (!note.ownerDomain || !note.lostDescription) return;
-    resolved.add(note.ownerDomain);
+    const hasLostReport = radarMemory.lostReports.some(
+      (report) =>
+        report.domain === note.ownerDomain &&
+        normalize(report.description || "") === normalize(note.lostDescription || "")
+    );
+    const hasFoundReport = radarMemory.foundReports.some(
+      (report) =>
+        report.contact === note.finderDomain &&
+        normalize(report.description || "") === normalize(note.foundDescription || "")
+    );
+    if (hasLostReport && hasFoundReport) resolved.add(note.ownerDomain);
   });
   return resolved.size;
 }
 
 function renderSignalStats() {
-  const lostStarterCount = countUniqueDomains(radarMemory.lostReports, "domain");
-  const foundStarterCount = countUniqueDomains(radarMemory.foundReports, "contact");
+  const lostSignalCount = radarMemory.lostReports.length;
+  const foundSignalCount = radarMemory.foundReports.length;
+  const resolvedCaseCount = getResolvedStarterCount();
   signalStats.innerHTML = `
-    <span>Trong <strong>${getArtemisLiveMinutes()}</strong> phút qua, Artemis đã tiếp nhận tín hiệu từ <strong>${lostStarterCount}</strong> Starter tìm đồ & <strong>${foundStarterCount}</strong> Starter trả đồ,<br /> giúp <strong>${getResolvedStarterCount()}</strong> Starter tìm được đồ</span>
+    <span>Trong <strong>${getArtemisLiveMinutes()}</strong> phút qua, Artemis đã tiếp nhận <strong>${lostSignalCount}</strong> tín hiệu tìm đồ và <strong>${foundSignalCount}</strong> tín hiệu trả đồ,<br /> giúp <strong>${resolvedCaseCount}</strong> Starter tìm được đồ</span>
   `;
   signalStats.classList.remove("pulse");
   requestAnimationFrame(() => signalStats.classList.add("pulse"));
   renderRadarWordCloud();
 }
 
+function getRadarSignalLabel(report) {
+  const tokens = tokenize(report.description || "");
+  if (tokens.length >= 2) return tokens.slice(0, 3).join(" ");
+  return tokens[0] || (report.description || "").trim();
+}
+
 function renderRadarWordCloud() {
-  const recentSignals = radarMemory.foundReports
+  const recentReports = [...radarMemory.lostReports, ...radarMemory.foundReports]
     .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
     .slice(0, 6);
+  const reportLabels = recentReports.map(getRadarSignalLabel).filter(Boolean);
+  const keywordLabels = recentReports
+    .flatMap((item) => tokenize(item.description || ""))
+    .filter((token) => !reportLabels.includes(token));
+  const signalLabels = [...reportLabels, ...keywordLabels].slice(0, 6);
 
-  radarWordCloud.innerHTML = recentSignals
-    .map((item, index) => `<span style="--i:${index}">${item.description}</span>`)
+  radarWordCloud.innerHTML = signalLabels
+    .map((label, index) => `<span style="--i:${index}">${label}</span>`)
     .join("");
   radarWordCloud.classList.remove("is-refreshing");
   void radarWordCloud.offsetWidth;
@@ -650,7 +911,7 @@ function findStaticMatch(description) {
     .sort((a, b) => b.score - a.score)[0];
 }
 
-function handleLostFlow(text) {
+async function handleLostFlow(text) {
   if (state.mode === "lost_description") {
     state.data.description = text;
     state.mode = "lost_date";
@@ -660,11 +921,26 @@ function handleLostFlow(text) {
 
   if (state.mode === "lost_date") {
     state.data.date = text;
-    const lostReport = { ...state.data, type: "lost", createdAt: new Date().toISOString() };
+    const lostReport = {
+      ...state.data,
+      type: "lost",
+      createdAt: new Date().toISOString(),
+      _localPending: true,
+      _localCreatedAt: Date.now(),
+    };
     userMemory.searches.push(lostReport);
     radarMemory.lostReports.push(lostReport);
     saveRadarMemory();
+    const savedReport = await persistOrWarn(() => dataService.createLostItem(lostReport));
+    if (savedReport?.id) {
+      delete lostReport._localPending;
+      delete lostReport._localCreatedAt;
+      Object.assign(lostReport, savedReport);
+      saveRadarMemory();
+    }
+    await loadSharedState();
     renderSignalStats();
+    if (isAdmin()) renderAdmin();
     showChatBar(false);
 
     const foundMatch = findFoundReportMatch(state.data.description, state.data.date, state.data.image, userMemory.domain);
@@ -687,7 +963,7 @@ function handleLostFlow(text) {
   }
 }
 
-function handleReturnFlow(text) {
+async function handleReturnFlow(text) {
   if (state.mode === "return_description") {
     state.data.description = text;
     state.mode = "return_date";
@@ -704,10 +980,25 @@ function handleReturnFlow(text) {
 
   if (state.mode === "return_location") {
     state.data.location = text;
-    const foundReport = { ...state.data, type: "found", createdAt: new Date().toISOString() };
+    const foundReport = {
+      ...state.data,
+      type: "found",
+      createdAt: new Date().toISOString(),
+      _localPending: true,
+      _localCreatedAt: Date.now(),
+    };
     radarMemory.foundReports.push(foundReport);
     saveRadarMemory();
+    const savedReport = await persistOrWarn(() => dataService.createFoundItem(foundReport));
+    if (savedReport?.id) {
+      delete foundReport._localPending;
+      delete foundReport._localCreatedAt;
+      Object.assign(foundReport, savedReport);
+      saveRadarMemory();
+    }
+    await loadSharedState();
     renderSignalStats();
+    if (isAdmin()) renderAdmin();
 
     const match = findReportMatch(state.data.description, state.data.date, state.data.image, userMemory.domain);
 
@@ -732,7 +1023,7 @@ function handleReturnFlow(text) {
   }
 }
 
-function handleInput(rawText) {
+async function handleInput(rawText) {
   if (!userMemory.domain) {
     showChatBar(false);
     setMoonText("Bạn cần nhập domain để vào vũ trụ trước nhé.");
@@ -765,12 +1056,12 @@ function handleInput(rawText) {
   }
 
   if (state.flow === "lost") {
-    handleLostFlow(text);
+    await handleLostFlow(text);
     return;
   }
 
   if (state.flow === "return") {
-    handleReturnFlow(text);
+    await handleReturnFlow(text);
   }
 }
 
@@ -798,7 +1089,7 @@ function renderMarket() {
     if (item.hidden) return;
     const cared = item.caredBy.includes(userMemory.domain);
     const passed = item.stockStatus === "Đã pass";
-    const isOwner = item.contact === userMemory.domain;
+    const isOwner = item.ownerDomain === userMemory.domain;
     const canEdit = isOwner && !passed && item.editCount < 1;
     const isPremiumCloud = parsePriceValue(item.price) > 50000;
     const card = document.createElement("article");
@@ -969,11 +1260,19 @@ function renderAdmin() {
 
   pendingItems.forEach((item, index) => {
     pendingTable.innerHTML += `
-      <div class="admin-row">
+      <div class="admin-row admin-product-row">
         <span><strong>${item.contact}</strong></span>
-        <span>${item.name}</span>
+        <span class="admin-product-info">
+          ${item.image ? `<img src="${item.image}" alt="${item.name}" />` : ""}
+          <span>
+            <strong>${item.name}</strong>
+            <small>${item.description || "Chưa có mô tả."}</small>
+          </span>
+        </span>
         <span>${item.price} / ${item.quantity}</span>
-        <span class="admin-actions"><button type="button" class="admin-approve" data-approve="${index}">Duyệt</button></span>
+        <span class="admin-actions">
+          <button type="button" class="admin-approve" data-approve="${index}">Duyệt</button>
+        </span>
       </div>
     `;
   });
@@ -1033,13 +1332,16 @@ function markVisibleNotificationsRead() {
 }
 
 function enableNotification(data) {
-  radarMemory.notifications.unshift({
+  const note = {
+    id: createClientId("radar-note"),
     recipientDomain: data.domain,
     type: "radar",
     message: `Đã bật radar cho domain ${data.domain}. Khi có tín hiệu khớp với "${data.description}" (${data.date}), Artemis sẽ gửi thông báo về đây.`,
     createdAt: new Date().toISOString(),
-  });
+  };
+  radarMemory.notifications.unshift(note);
   saveRadarMemory();
+  persistOrWarn(() => dataService.createNotification(note));
   renderNotifications();
   setMoonText("Đã bật thông báo.\nKhi vũ trụ bắt được tín hiệu khớp, mình sẽ nhắc bạn ngay.");
   addChoices([
@@ -1050,6 +1352,7 @@ function enableNotification(data) {
 }
 
 function addMatchNotification(lostReport, foundReport) {
+  if (hasMatchNotification(lostReport, foundReport)) return;
   const isStrong = lostReport.matchLevel === "strong" || foundReport.matchLevel === "strong";
   const ownerPrefix = isStrong ? "Radar vừa bắt được tín hiệu khớp" : "Radar thấy có tín hiệu gần giống";
   const finderPrefix = isStrong ? "Radar đã tìm được chủ nhân" : "Radar thấy có vẻ như đã tìm được chủ nhân";
@@ -1057,7 +1360,8 @@ function addMatchNotification(lostReport, foundReport) {
   const lostAlternatives = (lostReport.alternatives || []).map((item) => item.domain).filter(Boolean);
   const foundAltText = foundAlternatives.length ? ` Có thêm tín hiệu gần giống từ: ${foundAlternatives.join(", ")}.` : "";
   const lostAltText = lostAlternatives.length ? ` Có thêm Starter gần giống: ${lostAlternatives.join(", ")}.` : "";
-  radarMemory.notifications.unshift({
+  const ownerNote = {
+    id: createClientId("match-owner"),
     recipientDomain: lostReport.domain,
     type: "match",
     message: `${ownerPrefix} với món bạn tìm: "${foundReport.description}". Contact người trả: ${foundReport.contact}. Bạn liên hệ thử để xác nhận nhé.${foundAltText} Thời gian nhặt: ${foundReport.date}. Vị trí: ${foundReport.location}.`,
@@ -1069,8 +1373,9 @@ function addMatchNotification(lostReport, foundReport) {
     location: foundReport.location,
     image: foundReport.image || lostReport.image || "",
     createdAt: new Date().toISOString(),
-  });
-  radarMemory.notifications.unshift({
+  };
+  const finderNote = {
+    id: createClientId("match-finder"),
     recipientDomain: foundReport.contact,
     type: "match",
     message: `${finderPrefix} cho "${foundReport.description}". Contact người tìm: ${lostReport.domain}. Bạn liên hệ thử để xác nhận nhé.${lostAltText}`,
@@ -1082,8 +1387,12 @@ function addMatchNotification(lostReport, foundReport) {
     foundDate: foundReport.date,
     location: foundReport.location,
     createdAt: new Date().toISOString(),
-  });
+  };
+  radarMemory.notifications.unshift(ownerNote);
+  radarMemory.notifications.unshift(finderNote);
   saveRadarMemory();
+  persistOrWarn(() => dataService.createNotification(ownerNote));
+  persistOrWarn(() => dataService.createNotification(finderNote));
   renderNotifications();
 }
 
@@ -1093,8 +1402,29 @@ function readImageAsDataUrl(file) {
       resolve("");
       return;
     }
+    if (!file.type.startsWith("image/")) {
+      const reader = new FileReader();
+      reader.addEventListener("load", () => resolve(reader.result));
+      reader.readAsDataURL(file);
+      return;
+    }
+
     const reader = new FileReader();
-    reader.addEventListener("load", () => resolve(reader.result));
+    reader.addEventListener("load", () => {
+      const image = new Image();
+      image.addEventListener("load", () => {
+        const maxSize = 900;
+        const scale = Math.min(1, maxSize / Math.max(image.width, image.height));
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round(image.width * scale));
+        canvas.height = Math.max(1, Math.round(image.height * scale));
+        const context = canvas.getContext("2d");
+        context.drawImage(image, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL("image/jpeg", 0.72));
+      });
+      image.addEventListener("error", () => resolve(reader.result));
+      image.src = reader.result;
+    });
     reader.readAsDataURL(file);
   });
 }
@@ -1103,6 +1433,9 @@ function setLaunchChatMode(enabled) {
   marketForm.classList.toggle("chat-mode", enabled);
   launchWizard.hidden = !enabled;
   launchSubmit.hidden = enabled;
+  if (!enabled && marketImageField.parentElement !== marketImageOriginalParent) {
+    marketImageOriginalParent.insertBefore(marketImageField, marketImageOriginalNext);
+  }
   marketForm.querySelectorAll("[data-market-field]").forEach((field) => {
     field.hidden = enabled;
   });
@@ -1123,11 +1456,16 @@ function showLaunchWizardStep() {
   launchWizardInput.value = "";
   launchWizardInput.placeholder = step.placeholder;
   launchWizardInput.hidden = step.key === "image";
+  launchWizard.querySelector(".launch-wizard-input").classList.toggle("image-step", step.key === "image");
   launchWizardNext.textContent = step.key === "image" ? "Hoàn tất" : "Gửi";
-  marketForm.querySelector('[data-market-field="image"]').hidden = step.key !== "image";
+  marketImageField.hidden = step.key !== "image";
   if (step.key === "image") {
+    launchWizard.insertBefore(marketImageField, launchWizard.querySelector(".launch-wizard-input"));
     marketImage.focus();
   } else {
+    if (marketImageField.parentElement !== marketImageOriginalParent) {
+      marketImageOriginalParent.insertBefore(marketImageField, marketImageOriginalNext);
+    }
     launchWizardInput.focus();
   }
 }
@@ -1137,7 +1475,7 @@ function startLaunchWizard() {
   launchWizardData = {};
   launchWizardMessages.innerHTML = "";
   setLaunchChatMode(true);
-  marketForm.querySelector('[data-market-field="image"]').hidden = true;
+  marketImageField.hidden = true;
   showLaunchWizardStep();
 }
 
@@ -1194,7 +1532,7 @@ function openLaunchFormForCreate() {
 function openLaunchFormForEdit(index) {
   const item = normalizeMarketItem(marketItems[index]);
   const adminEditing = isAdmin();
-  if (!item || (!adminEditing && (item.contact !== userMemory.domain || item.editCount >= 1 || item.stockStatus === "Đã pass"))) return;
+  if (!item || (!adminEditing && (item.ownerDomain !== userMemory.domain || item.editCount >= 1 || item.stockStatus === "Đã pass"))) return;
 
   editingMarketIndex = index;
   marketName.value = item.name || "";
@@ -1213,26 +1551,45 @@ function openLaunchFormForEdit(index) {
   launchPanel.hidden = false;
 }
 
-loginForm.addEventListener("submit", (event) => {
+loginForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const domain = loginDomain.value.trim().toLowerCase();
   const password = loginPassword.value.trim();
   loginStatus.textContent = "";
 
-  if (!domain || !password) {
-    loginStatus.textContent = "Bạn nhập domain và mật khẩu giúp mình nhé.";
+  if (!domain) {
+    loginStatus.textContent = "Bạn nhập domain giúp mình nhé.";
+    loginDomain.focus();
     return;
   }
 
-  authMemory[domain] = password;
-  saveAuthMemory();
+  if (!password) {
+    loginStatus.textContent = "Bạn nhập mật khẩu cho domain này giúp mình nhé.";
+    loginPassword.focus();
+    return;
+  }
 
-  userMemory.domain = domain;
-  openAdminPanel.hidden = userMemory.domain !== "artemis_8920";
-  renderMarket();
-  renderNotifications();
-  loginPanel.hidden = true;
-  askStart();
+  try {
+    await dataService.login(domain, password);
+  } catch (error) {
+    if (error.status === 401) {
+      loginStatus.textContent = error.payload?.error || "Mật khẩu chưa đúng với domain này.";
+      loginPassword.focus();
+      return;
+    }
+    if (authMemory[domain] && authMemory[domain] !== password) {
+      loginStatus.textContent = "Mật khẩu chưa đúng với domain này.";
+      loginPassword.focus();
+      return;
+    }
+    if (!authMemory[domain]) authMemory[domain] = password;
+    saveAuthMemory();
+    showBackendWarning();
+  }
+
+  authMemory.currentDomain = domain;
+  saveAuthMemory();
+  enterGalaxy(domain);
 });
 
 chatForm.addEventListener("submit", async (event) => {
@@ -1243,7 +1600,7 @@ chatForm.addEventListener("submit", async (event) => {
   }
   chatImage.value = "";
   chatImage.closest(".chat-image-button")?.classList.remove("has-image");
-  handleInput(chatInput.value);
+  await handleInput(chatInput.value);
 });
 
 chatImage.addEventListener("change", () => {
@@ -1285,7 +1642,8 @@ document.querySelector("#closeLaunchForm").addEventListener("click", () => {
   launchPanel.hidden = true;
 });
 
-document.querySelector("#notificationButton").addEventListener("click", () => {
+document.querySelector("#notificationButton").addEventListener("click", async () => {
+  await loadSharedState();
   notificationPanel.hidden = false;
   markVisibleNotificationsRead();
 });
@@ -1294,8 +1652,9 @@ document.querySelector("#closeNotificationPanel").addEventListener("click", () =
   notificationPanel.hidden = true;
 });
 
-openAdminPanel.addEventListener("click", () => {
+openAdminPanel.addEventListener("click", async () => {
   if (userMemory.domain !== "artemis_8920") return;
+  await loadSharedState();
   renderAdmin();
   adminPanel.hidden = false;
 });
@@ -1316,6 +1675,18 @@ window.addEventListener("scroll", () => {
   backToTop.hidden = window.scrollY < 620;
 });
 
+window.addEventListener("keydown", (event) => {
+  if (!(event.ctrlKey && event.shiftKey && event.key.toLowerCase() === "l")) return;
+  delete authMemory.currentDomain;
+  saveAuthMemory();
+  userMemory.domain = "";
+  loginPassword.value = "";
+  loginPanel.hidden = false;
+  openAdminPanel.hidden = true;
+  showChatBar(false);
+  setMoonText("Nhập domain để Artemis mở cổng vào vũ trụ đồ đạc nhé.");
+});
+
 marketForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   if (!validateMarketForm()) return;
@@ -1324,11 +1695,12 @@ marketForm.addEventListener("submit", async (event) => {
     marketImage.focus();
     return;
   }
+  launchStatus.textContent = "Artemis đang nén ảnh và gửi vật phẩm lên chợ...";
   const image = await readImageAsDataUrl(marketImage.files[0]);
   if (editingMarketIndex !== null) {
     const item = normalizeMarketItem(marketItems[editingMarketIndex]);
     const adminEditing = isAdmin();
-    if (!item || (!adminEditing && (item.contact !== userMemory.domain || item.editCount >= 1))) return;
+    if (!item || (!adminEditing && (item.ownerDomain !== userMemory.domain || item.editCount >= 1))) return;
 
     marketItems[editingMarketIndex] = {
       ...item,
@@ -1338,12 +1710,18 @@ marketForm.addEventListener("submit", async (event) => {
       link: extractLink(marketDescription.value.trim()),
       price: normalizePrice(marketPrice.value),
       contact: adminEditing ? marketContact.value.trim() : item.contact,
+      ownerDomain: item.ownerDomain || item.contact,
       stockStatus: marketStockStatus.value || item.stockStatus || "Còn hàng",
       image: image || item.image,
       edited: true,
       editCount: adminEditing ? item.editCount : item.editCount + 1,
     };
     saveMarketState();
+    const savedItem = await persistOrWarn(() => dataService.updateMarketplaceItem(marketItems[editingMarketIndex]));
+    if (savedItem?.id) {
+      marketItems[editingMarketIndex] = normalizeMarketItem(savedItem);
+      saveMarketState();
+    }
     renderMarket();
     renderAdmin();
     launchStatus.textContent = "Radar đã lưu chỉnh sửa. Món này sẽ hiển thị (edited).";
@@ -1354,13 +1732,14 @@ marketForm.addEventListener("submit", async (event) => {
     return;
   }
 
-  pendingItems.unshift({
+  const pendingItem = {
     name: marketName.value.trim(),
     quantity: marketQuantity.value,
     description: marketDescription.value.trim(),
     link: extractLink(marketDescription.value.trim()),
     price: normalizePrice(marketPrice.value),
     contact: marketContact.value.trim(),
+    ownerDomain: userMemory.domain,
     stockStatus: "Còn hàng",
     image,
     status: "Chờ Artemis duyệt",
@@ -1369,17 +1748,63 @@ marketForm.addEventListener("submit", async (event) => {
     editCount: 0,
     edited: false,
     hidden: false,
-  });
+    createdAt: new Date().toISOString(),
+  };
+  const autoApproved = isAdmin() || shouldAutoApproveMarketplaceItem(pendingItem);
+  const submissionItem = {
+    ...pendingItem,
+    status: autoApproved ? "Đã duyệt" : "Chờ Artemis duyệt",
+    _autoApproved: autoApproved,
+    _localPending: true,
+    _localCreatedAt: Date.now(),
+  };
+
+  if (autoApproved) {
+    marketItems.unshift(submissionItem);
+  } else {
+    pendingItems.unshift(submissionItem);
+  }
   saveMarketState();
-  renderAdmin();
-  launchStatus.textContent = "Món đồ của bạn sẽ xuất hiện khi được Artemis duyệt.";
+  let savedItem = await persistOrWarn(() => dataService.createMarketplaceItem(submissionItem));
+  if (savedItem?.id && autoApproved && normalize(savedItem.status || "") !== "da duyet") {
+    savedItem = await persistOrWarn(() =>
+      dataService.approveMarketplaceItem({ ...savedItem, status: "Đã duyệt", hidden: false }, userMemory.domain)
+    ) || savedItem;
+  }
+  if (savedItem?.id) {
+    delete submissionItem._localPending;
+    delete submissionItem._localCreatedAt;
+    Object.assign(submissionItem, savedItem);
+    saveMarketState();
+  }
+  if (savedItem?.id) {
+    await loadSharedState();
+  } else {
+    const localList = autoApproved ? marketItems : pendingItems;
+    const localIndex = localList.indexOf(submissionItem);
+    if (localIndex >= 0) localList.splice(localIndex, 1);
+    saveMarketState();
+    renderMarket();
+    renderAdmin();
+    launchStatus.textContent = "Backend chưa lưu được vật phẩm. Bạn thử chọn ảnh nhỏ hơn hoặc gửi lại giúp Artemis nha.";
+    return;
+  }
+  if (savedItem?.id) {
+    launchStatus.textContent = autoApproved
+      ? "Artemis đã tự duyệt vì thông tin và ảnh đã đủ."
+      : "Món đồ của bạn sẽ xuất hiện khi được Artemis duyệt.";
+  }
   marketForm.reset();
   setLaunchChatMode(false);
   launchPanel.hidden = true;
-  setMoonText("Artemis đã nhận đủ tín hiệu món đồ.\nMón của bạn sẽ xuất hiện khi được duyệt nha.");
+  setMoonText(
+    autoApproved
+      ? "Artemis đã nhận đủ tín hiệu món đồ.\nMón của bạn đã bay lên Phiên chợ trên mây."
+      : "Artemis đã nhận đủ tín hiệu món đồ.\nAdmin Artemis sẽ duyệt yêu cầu của bạn trước khi món bay lên chợ nha."
+  );
 });
 
-adminList.addEventListener("click", (event) => {
+adminList.addEventListener("click", async (event) => {
   const adminEditButton = event.target.closest("[data-admin-edit-market]");
   if (adminEditButton) {
     if (!isAdmin()) return;
@@ -1396,6 +1821,11 @@ adminList.addEventListener("click", (event) => {
     item.hidden = !item.hidden;
     marketItems[index] = item;
     saveMarketState();
+    const savedItem = await persistOrWarn(() => dataService.updateMarketplaceItem(item));
+    if (savedItem?.id) {
+      marketItems[index] = normalizeMarketItem(savedItem);
+      saveMarketState();
+    }
     renderMarket();
     renderAdmin();
     setMoonText(
@@ -1411,14 +1841,16 @@ adminList.addEventListener("click", (event) => {
   const index = Number(button.dataset.approve);
   const item = pendingItems.splice(index, 1)[0];
   if (!item) return;
-  marketItems.unshift({ ...item, status: "Đã duyệt", hidden: false });
+  const approvedItem = { ...item, status: "Đã duyệt", hidden: false };
+  const savedItem = await persistOrWarn(() => dataService.approveMarketplaceItem(approvedItem, userMemory.domain));
+  marketItems.unshift(normalizeMarketItem(savedItem || approvedItem));
   saveMarketState();
   renderMarket();
   renderAdmin();
   setMoonText(`Artemis đã duyệt "${item.name}".\nVật phẩm đã bay lên Phiên chợ trên mây.`);
 });
 
-marketGrid.addEventListener("click", (event) => {
+marketGrid.addEventListener("click", async (event) => {
   const detailButton = event.target.closest(".detail-button");
   if (detailButton) {
     const card = detailButton.closest(".market-card");
@@ -1439,12 +1871,18 @@ marketGrid.addEventListener("click", (event) => {
     const card = passButton.closest(".market-card");
     const index = Number(card.dataset.index);
     const item = normalizeMarketItem(marketItems[index]);
-    if (!item || item.contact !== userMemory.domain) return;
+    if (!item || item.ownerDomain !== userMemory.domain) return;
     const willReopen = item.stockStatus === "Đã pass";
     item.stockStatus = willReopen ? "Còn hàng" : "Đã pass";
     marketItems[index] = item;
     sortMarketItems();
     saveMarketState();
+    const savedItem = await persistOrWarn(() => dataService.updateMarketplaceItem(item));
+    if (savedItem?.id) {
+      const savedIndex = marketItems.findIndex((marketItem) => String(marketItem.id) === String(savedItem.id));
+      if (savedIndex >= 0) marketItems[savedIndex] = normalizeMarketItem(savedItem);
+      saveMarketState();
+    }
     renderMarket();
     renderAdmin();
     showChatBar(false);
@@ -1475,17 +1913,28 @@ marketGrid.addEventListener("click", (event) => {
     userMemory.interests.push(item.name);
   }
   saveMarketState();
+  const savedItem = await persistOrWarn(() => dataService.updateMarketplaceItem(item));
+  if (savedItem?.id) {
+    const index = marketItems.findIndex((marketItem) => String(marketItem.id) === String(savedItem.id));
+    if (index >= 0) marketItems[index] = normalizeMarketItem(savedItem);
+    saveMarketState();
+  }
 
-  if (!willUncare && item.contact && item.contact !== userMemory.domain) {
-    radarMemory.notifications.unshift({
-      recipientDomain: item.contact,
+  const ownerDomain = item.ownerDomain || item.contact;
+  if (!willUncare && ownerDomain && ownerDomain !== userMemory.domain) {
+    const note = {
+      id: createClientId("market-note"),
+      recipientDomain: ownerDomain,
       type: "market",
       message: `${userMemory.domain} vừa thả sao quan tâm món "${item.name}" của bạn trong Phiên chợ trên mây.`,
       itemName: item.name,
+      ownerDomain,
       interestedDomain: userMemory.domain,
       createdAt: new Date().toISOString(),
-    });
+    };
+    radarMemory.notifications.unshift(note);
     saveRadarMemory();
+    persistOrWarn(() => dataService.createNotification(note));
   }
 
   renderMarket();
@@ -1563,6 +2012,11 @@ renderNotifications();
 renderSignalStats();
 loadSharedState();
 setInterval(renderSignalStats, 60000);
+setInterval(loadSharedState, 15000);
 showChatBar(false);
-setMoonText("Nhập domain để Artemis mở cổng vào vũ trụ đồ đạc nhé.");
+if (authMemory.currentDomain) {
+  enterGalaxy(authMemory.currentDomain);
+} else {
+  setMoonText("Nhập domain để Artemis mở cổng vào vũ trụ đồ đạc nhé.");
+}
 
