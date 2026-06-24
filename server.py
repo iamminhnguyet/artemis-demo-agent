@@ -584,13 +584,13 @@ class ArtemisHandler(SimpleHTTPRequestHandler):
 
     def do_POST(self):
         route = urlparse(self.path).path
+        if route == "/api/state":
+            self._send_json({"status": "error", "error": "State import is disabled"}, status=405)
+            return
+
         payload = self._read_json_body()
         if payload is None:
             self._send_json({"status": "error", "error": "Invalid JSON"}, status=400)
-            return
-
-        if route == "/api/state":
-            self._send_json(import_state(payload))
             return
         if route == "/api/auth/login":
             result = login_user(payload.get("domain", ""), payload.get("password", ""))
